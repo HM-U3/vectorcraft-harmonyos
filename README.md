@@ -1,5 +1,10 @@
 # 矢量工坊 · VectorCraft for HarmonyOS
 
+[![upstream](https://img.shields.io/badge/upstream-storytold%2Fvectorcraft-2f81f7?logo=github&logoColor=white)](https://github.com/storytold/vectorcraft)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-3da639)](LICENSE-MIT)
+[![platform](https://img.shields.io/badge/platform-HarmonyOS%205%2B-0a59f7)](https://developer.huawei.com/consumer/cn/)
+[![engine](https://img.shields.io/badge/engine-WebAssembly-654ff0?logo=webassembly&logoColor=white)](docs/technical-notes.md)
+
 > 把开源矢量插画编辑器 **[VectorCraft](https://github.com/storytold/vectorcraft)**（Rust → WebAssembly）装进
 > **HarmonyOS 5+** 的客户端。引擎跑在 ArkWeb 里，外面套一层原生鸿蒙外壳 ——
 > 鸿蒙平板与鸿蒙电脑（2in1）都可用，界面已完整中文化。
