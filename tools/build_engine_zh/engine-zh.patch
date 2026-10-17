@@ -1,0 +1,110 @@
+diff --git a/apps/vectorcraft-web/Trunk.toml b/apps/vectorcraft-web/Trunk.toml
+index aad9a16..30a773f 100644
+--- a/apps/vectorcraft-web/Trunk.toml
++++ b/apps/vectorcraft-web/Trunk.toml
+@@ -12,7 +12,11 @@ port = 8766
+ # Copy the craft-fonts faces web builds fetch (crates/text/web-fonts.txt) into the site's fonts/
+ # folder; a no-op without CRAFT_FONTS_DIR. Runs for `trunk serve` and `trunk build`, through cargo so
+ # it needs no shell (xtask/src/web_fonts.rs).
+-[[hooks]]
+-stage = "post_build"
+-command = "cargo"
+-command_arguments = ["xtask", "web-fonts"]
++#
++# HarmonyOS 构建配方：注释掉该钩子 —— 我们没有 CRAFT_FONTS_DIR（WEB_FONTS 为空，钩子本是空操作），
++# 且钩子会触发 host 侧 xtask 的 debug 编译，在 rustup 自带 MinGW 工具链上会因缺少
++# liblto_plugin.dll 而失败。需要 craft-fonts 时改回并安装完整 MinGW 工具链。
++# [[hooks]]
++# stage = "post_build"
++# command = "cargo"
++# command_arguments = ["xtask", "web-fonts"]
+diff --git a/apps/vectorcraft-web/src/web.rs b/apps/vectorcraft-web/src/web.rs
+index cfe8458..3d6f214 100644
+--- a/apps/vectorcraft-web/src/web.rs
++++ b/apps/vectorcraft-web/src/web.rs
+@@ -147,10 +147,20 @@ async fn run(host: Host, canvas: web_sys::HtmlCanvasElement, moving: Option<Movi
+     }
+ }
+ 
++/// A flag the host page can set on `window` before the engine starts (the HarmonyOS shell does,
++/// because a `resource://rawfile` page cannot rewrite its own query string): `__VC_WEBGL = "1"`
++/// forces the WebGL2 backend, `__VC_LANG = "zh-hans"` stands in for `?lang=`.
++fn js_flag(name: &str) -> Option<String> {
++    let window = web_sys::window()?;
++    let v = js_sys::Reflect::get(&window, &wasm_bindgen::JsValue::from_str(name)).ok()?;
++    v.as_string().filter(|s| !s.is_empty())
++}
++
+ /// The runner's options: wgpu (WebGPU where available, else WebGL2; `?webgl` forces WebGL2).
+ fn web_options() -> eframe::WebOptions {
+     let mut options = eframe::WebOptions::default();
+-    if query().contains("webgl")
++    let forced_gl = query().contains("webgl") || js_flag("__VC_WEBGL").as_deref() == Some("1");
++    if forced_gl
+         && let eframe::egui_wgpu::WgpuSetup::CreateNew(create) = &mut options.wgpu_options.wgpu_setup
+     {
+         create.instance_descriptor.backends = eframe::wgpu::Backends::GL;
+@@ -163,6 +173,7 @@ fn web_options() -> eframe::WebOptions {
+ /// browser; and show the loading text in that language.
+ fn detect_language() {
+     let mut tags: Vec<String> = query_param("lang").into_iter().collect();
++    tags.extend(js_flag("__VC_LANG"));
+     if let Some(navigator) = web_sys::window().map(|w| w.navigator()) {
+         tags.extend(navigator.languages().iter().filter_map(|v| v.as_string()));
+         tags.extend(navigator.language());
+diff --git a/crates/text/src/fontdb.rs b/crates/text/src/fontdb.rs
+index c37ca8e..fe9118f 100644
+--- a/crates/text/src/fontdb.rs
++++ b/crates/text/src/fontdb.rs
+@@ -28,6 +28,8 @@ static BUNDLED: &[&[u8]] = &[
+     include_bytes!("../../../assets/fonts/Inter-Medium.ttf"),
+     include_bytes!("../../../assets/fonts/Inter-SemiBold.ttf"),
+     include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf"),
++    // HarmonyOS 中文化：Noto Sans SC 子集，文档中文文本的回退字形
++    include_bytes!("../../../assets/fonts/NotoSansSC-Subset.ttf"),
+ ];
+ /// Without `bundled-fonts` a database starts with none: the embedder adds its fonts
+ /// ([`FontDb::add_font`]); until then text has no glyphs.
+diff --git a/crates/ui-egui/src/chrome.rs b/crates/ui-egui/src/chrome.rs
+index b49b998..a2ce0b6 100644
+--- a/crates/ui-egui/src/chrome.rs
++++ b/crates/ui-egui/src/chrome.rs
+@@ -39,7 +39,10 @@ pub fn app_bar(app: &mut VectorcraftApp, ui: &mut Ui) {
+         }
+         ui.horizontal_centered(|ui| {
+             // With the system title bar the OS draws its own icon: no in-app brand mark.
+-            if !system {
++            // HarmonyOS port: the web/ArkWeb build also drops it. A lone 18 pt tile at the far
++            // left sits on the same line as 文件/编辑/…, reads as a button and does nothing when
++            // tapped; the native shell shows the brand in its expanded sidebar instead.
++            if !system && !cfg!(target_arch = "wasm32") {
+                 let (r, _) = ui.allocate_exact_size(vec2(MARK, MARK), Sense::hover());
+                 crate::brand::paint_mark(ui, r);
+                 ui.add_space(6.0);
+diff --git a/crates/ui-egui/src/theme.rs b/crates/ui-egui/src/theme.rs
+index 1f57885..88da931 100644
+--- a/crates/ui-egui/src/theme.rs
++++ b/crates/ui-egui/src/theme.rs
+@@ -509,6 +509,9 @@ pub fn install_fonts(ctx: &egui::Context) {
+     fonts.font_data.insert("Inter-SemiBold".to_owned(), inter(include_bytes!("../../../assets/fonts/Inter-SemiBold.ttf")));
+     add(&mut fonts, "SourceSans3-Semibold", include_bytes!("../../../assets/fonts/SourceSans3-Semibold.ttf"));
+     add(&mut fonts, "JetBrainsMono", include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf"));
++    // HarmonyOS 中文化：内嵌 Noto Sans SC 子集（CJK 字形），作为所有字族的最后回退。
++    // Web 构建读不到系统 CJK 字体，不嵌的话中文界面整片是豆腐块。
++    add(&mut fonts, "NotoSansSC", include_bytes!("../../../assets/fonts/NotoSansSC-Subset.ttf"));
+     let fallback: Vec<String> = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+     let mut prop = vec!["Inter".to_string(), "SourceSans3".to_string()];
+     prop.extend(fallback.clone());
+@@ -523,6 +526,12 @@ pub fn install_fonts(ctx: &egui::Context) {
+     mono.extend(fallback);
+     fonts.families.insert(FontFamily::Name(FONT_MONO.into()), mono);
+     add_craft_fonts(&mut fonts);
++    // 中文字体接进每条回退链末尾（英文仍走 Inter / Source Sans 3）
++    for (_family, stack) in fonts.families.iter_mut() {
++        if !stack.iter().any(|f| f == "NotoSansSC") {
++            stack.push("NotoSansSC".to_string());
++        }
++    }
+     ctx.set_fonts(fonts);
+ }
+ 

@@ -1,0 +1,6 @@
+{
+  "modelVersion": "6.1.0",
+  "description": "VectorCraft for HarmonyOS - 基于开源 VectorCraft Web 版（Rust / WebAssembly）构建的鸿蒙客户端",
+  "dependencies": {},
+  "devDependencies": {}
+}

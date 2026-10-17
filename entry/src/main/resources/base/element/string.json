@@ -1,0 +1,32 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "矢量工坊 · 基于 VectorCraft 引擎的鸿蒙矢量插画编辑器"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "矢量工坊 矢量插画编辑器"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "矢量工坊"
+    },
+    {
+      "name": "help_page_title",
+      "value": "使用说明"
+    },
+    {
+      "name": "permission_internet_reason",
+      "value": "用于在兼容模式下加载内置编辑引擎与导出图像"
+    },
+    {
+      "name": "loading_title",
+      "value": "正在启动矢量工坊"
+    },
+    {
+      "name": "loading_hint",
+      "value": "首次启动需要解压并编译约 62 MB 矢量引擎，请稍候…"
+    }
+  ]
+}
