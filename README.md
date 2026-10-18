@@ -116,7 +116,7 @@ vectorcraft-harmonyos/
 │               ├── index.html                       已改写：加载容错 + 进度 + 错误页 + 保存/外链接管
 │               ├── vectorcraft-web-<hash>.classic.js 经典脚本胶水层（鸿蒙实际加载的）
 │               ├── vectorcraft-web-<hash>.js         上游 ESM 胶水层（保留备查）
-│               └── vectorcraft-web-<hash>_bg.wasm    中文引擎本体（约 62 MB）
+│               └── vectorcraft-web-<hash>_bg.wasm    中文引擎本体（约 65 MB）
 ├── tools/
 │   ├── build_engine_zh/                 引擎重编译配方（不参与打包）
 │   │   ├── README.md                    完整步骤 + 已知坑
@@ -124,7 +124,8 @@ vectorcraft-harmonyos/
 │   │   ├── gen_cjk_subset.py            Noto Sans SC 子集化
 │   │   └── fonts/LICENSE-NotoSansSC.txt Noto Sans SC 的 OFL 1.1 许可
 │   ├── pack_web.py                      trunk 产物 → rawfile 打包 + ESM 转经典脚本
-│   └── check-before-publish.py          提交前自查（签名路径、口令、本机绝对路径）
+│   ├── check-before-publish.py          提交前自查（签名路径、口令、本机绝对路径）
+│   └── local-signing.py                 本地签名开关（on / off / status）
 ├── LICENSE-MIT / LICENSE-APACHE
 ├── hvigor/hvigor-config.json5           hvigor 配置（modelVersion 必须与 oh-package.json5 一致）
 └── build-profile.json5 / hvigorfile.ts / oh-package.json5 / code-linter.json5
@@ -190,6 +191,27 @@ vectorcraft-harmonyos/
 
 `Column.alignItems()` 的交叉轴是水平方向，只接受 `HorizontalAlign`；`Alignment` 只能用于
 `Stack.alignContent()` 或通用 `.align()`。本工程已在 2026-10-17 全面修正。
+
+**Q：安装报 `9568320 no signature file`，但我已经点了「自动签名」**
+
+这是两个原因叠在一起：
+
+1. 仓库里的 `build-profile.json5` 出于开源考虑是**清空签名**的状态（`signingConfigs: []`），
+   直接打包得到的是未签名 HAP。
+2. 即便点了自动签名，DevEco 也**只写 `signingConfigs` 数组，不写 `products[0]` 里的
+   `"signingConfig": "default"` 绑定** —— 缺这一行，`SignHap` 只打一条 WARN 就跳过。
+
+仓库带了一个开关脚本，把这两件事一起管掉：
+
+```bash
+python tools/local-signing.py on       # 装真机前：恢复签名，并自动补上 products 绑定
+python tools/local-signing.py status   # 查看：有没有证书、有没有绑定、备份在不在
+python tools/local-signing.py off      # 提交前：备份并清空，避免证书与口令被推上仓库
+```
+
+首次使用前先在 `File → Project Structure → Signing Configs` 勾选
+`Automatically generate signature` 并 Apply，生成一套本机证书。`off` 会把当前配置备份到
+`build-profile.local-signing.json5`（已在 `.gitignore` 中忽略）。
 
 ## 十一、许可与署名
 
