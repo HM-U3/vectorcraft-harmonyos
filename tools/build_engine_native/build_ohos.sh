@@ -74,6 +74,12 @@ EOF
 
 write_cargo_config
 
+# Git Bash 下 PATH 里没有 cargo/rustup，补一条（Windows 的 rustup 装在 ~/.cargo/bin）。
+# 必须放在所有 rustup / cargo 调用之前。
+if ! command -v cargo >/dev/null 2>&1 && [[ -x "$HOME/.cargo/bin/cargo" ]]; then
+  export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
 # 宿主 crate 随本仓库一起维护（engine/vectorcraft-ohos），编译前铺进上游源码树。
 # 上游没有这个目录 —— 它是本项目新写的，所以必须从这里同步过去，改代码也改这边。
 HOST="$(cd "$(dirname "$0")/../.." && pwd)/engine/vectorcraft-ohos"
@@ -96,11 +102,6 @@ export AR_aarch64_unknown_linux_ohos="$NDK/llvm/bin/llvm-ar"
 export CXX_aarch64_unknown_linux_ohos="$NDK/llvm/bin/clang++"
 export CFLAGS_aarch64_unknown_linux_ohos="--sysroot=$NDK/sysroot -D__MUSL__"
 
-# Git Bash 下 PATH 里没有 cargo/rustup，补一条（Windows 的 rustup 装在 ~/.cargo/bin）
-if ! command -v cargo >/dev/null 2>&1 && [[ -x "$HOME/.cargo/bin/cargo" ]]; then
-  export PATH="$HOME/.cargo/bin:$PATH"
-fi
-
 echo "==> cargo build -p vectorcraft-ohos ($PROFILE, $TARGET)"
 cd "$SRC"
 if [[ "$PROFILE" == "release" ]]; then
@@ -112,6 +113,17 @@ else
 fi
 
 SO="$OUT/libvectorcraft_native.so"
+
+# 剥符号表：未 strip 约 92 MB，strip 后 78 MB，运行行为完全一致。
+# 带符号副本留在同目录（*.unstripped.so），回溯崩溃栈时才用得到。
+if [[ -x "$NDK/llvm/bin/llvm-strip" ]]; then
+  cp "$SO" "$OUT/libvectorcraft_native.unstripped.so"
+  "$NDK/llvm/bin/llvm-strip" --strip-unneeded "$SO"
+  echo "==> 已 strip（体积 $(wc -c < "$SO") 字节，带符号副本保留在 $OUT）"
+else
+  echo "警告：找不到 $NDK/llvm/bin/llvm-strip，产物未剥符号（约 92 MB）" >&2
+fi
+
 echo "==> 产出 $(wc -c < "$SO") 字节"
 
 DEST="$APP/entry/libs/arm64-v8a"
