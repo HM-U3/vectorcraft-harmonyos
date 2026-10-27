@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>矢量工坊 · 隐私政策</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 20px 64px;
+    font: 16px/1.75 -apple-system, "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
+    color: #1c1e21; background: #f6f7f9;
+  }
+  main { max-width: 760px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 40px 44px 48px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 32px rgba(0,0,0,.06); }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: .5px; }
+  .meta { color: #6b7280; font-size: 13px; margin-bottom: 28px; line-height: 1.9; }
+  .lead { background: #eef4ff; border-left: 3px solid #2563eb; padding: 14px 18px; border-radius: 8px;
+    margin: 0 0 28px; color: #1e3a8a; font-size: 15px; }
+  h2 { font-size: 19px; margin: 34px 0 10px; padding-top: 6px; }
+  p, li { color: #33373d; }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #e8eaed; vertical-align: top; }
+  th { background: #f7f8fa; font-weight: 600; }
+  code { background: #f2f3f5; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  a { color: #2563eb; word-break: break-all; }
+  footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid #e8eaed; color: #6b7280; font-size: 13px; }
+  @media (max-width: 560px) { body { padding: 16px 12px 40px; } main { padding: 26px 20px 32px; border-radius: 12px; } h1 { font-size: 23px; } }
+  @media (prefers-color-scheme: dark) {
+    body { background: #131518; color: #e6e8eb; }
+    main { background: #1b1d21; box-shadow: none; }
+    .meta, footer { color: #9aa0a6; }
+    .lead { background: #16233b; border-left-color: #4c8dff; color: #cfe0ff; }
+    p, li { color: #d7dade; }
+    th { background: #23262b; }
+    th, td { border-bottom-color: #2e3238; }
+    code { background: #23262b; }
+    a { color: #6ea8ff; }
+    footer { border-top-color: #2e3238; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>矢量工坊 隐私政策</h1>
+  <div class="meta">
+    生效日期：2026 年 10 月 18 日<br>
+    适用版本：1.0.0 及以上<br>
+    开发者：何梓铭（个人开发者）
+  </div>
+
+  <p class="lead">本应用完全在本机运行：<strong>不收集、不存储、不上传任何个人信息</strong>，
+  不包含统计、广告、推送或崩溃上报 SDK，也未申请任何系统权限。</p>
+
+  <h2>一、总述</h2>
+  <p>「矢量工坊」（以下简称"本应用"）是一款运行在 HarmonyOS 上的矢量插画编辑器。
+  编辑器引擎、字体与图标全部内嵌在安装包内，运行时不需要联网，也不与任何服务器通信。</p>
+
+  <h2>二、本应用不收集的信息</h2>
+  <ul>
+    <li>手机号、邮箱、姓名、身份证件等身份信息；</li>
+    <li>通讯录、短信、通话记录、日历；</li>
+    <li>精确或粗略位置信息；</li>
+    <li>相册、摄像头、麦克风内容；</li>
+    <li>设备唯一标识符（IMEI、OAID、SN 等）；</li>
+    <li>应用使用行为、点击流、崩溃日志等分析数据。</li>
+  </ul>
+
+  <h2>三、权限说明</h2>
+  <p>本应用<strong>未申请任何系统权限</strong>（包括网络、存储、相机、麦克风、位置、通讯录等）。</p>
+  <ul>
+    <li>编辑引擎、字体与图标全部内嵌在安装包内，运行时不访问网络；</li>
+    <li>打开与保存文件通过系统文件选择器完成，由你在选择器中授权具体文件，应用不会扫描或读取其他目录；</li>
+    <li>点击指向外部网站的文字时，由系统浏览器打开，不向本应用回传任何数据。</li>
+  </ul>
+
+  <h2>四、本地数据</h2>
+  <p>为了让你能继续编辑此前的作品，本应用会在设备本地保存以下内容：</p>
+  <table>
+    <thead><tr><th>数据</th><th>位置</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td>最近文件副本</td><td>应用沙箱 <code>files/recents/</code></td><td>供「最近文件」列表重新打开</td></tr>
+      <tr><td>最近文件列表</td><td>应用本地偏好存储</td><td>记录名称、时间、大小</td></tr>
+      <tr><td>界面偏好</td><td>应用本地偏好存储</td><td>渲染后端、界面语言、窗口形态</td></tr>
+    </tbody>
+  </table>
+  <p>上述数据<strong>只存在于你的设备</strong>，开发者无法访问、不会上传，也不会与任何第三方共享。
+  你可以在应用内「最近文件」面板删除单条或清空全部记录；卸载应用会删除全部本地数据。</p>
+
+  <h2>五、导出的文件</h2>
+  <p>你导出的 SVG、PDF、PNG、JPEG、WebP 与 <code>.vectorcraft</code> 工程文件，会写入你在系统「保存到」选择器中
+  指定的位置。这些文件的内容与存放位置完全由你控制，本应用不会另行复制或上传。</p>
+
+  <h2>六、第三方组件</h2>
+  <p>本应用内嵌以下开源组件，均不含数据采集代码：</p>
+  <ul>
+    <li>编辑引擎 VectorCraft 0.12.0（MIT OR Apache-2.0），来源
+      <a href="https://github.com/storytold/vectorcraft">github.com/storytold/vectorcraft</a>；</li>
+    <li>字体 Noto Sans SC 子集（SIL Open Font License 1.1）；</li>
+    <li>图标 Lucide（ISC License）。</li>
+  </ul>
+  <p>本应用为上述开源项目的第三方移植版本，与项目原作者无隶属关系。</p>
+
+  <h2>七、未成年人保护</h2>
+  <p>本应用不收集任何个人信息，也不含社交、支付、广告功能，未成年人可在监护人指导下正常使用。</p>
+
+  <h2>八、隐私政策的变更</h2>
+  <p>若本应用未来新增需要处理个人信息的功能，会在更新版本前修订本政策，并在应用内与应用市场说明中提示。
+  继续使用即表示你接受更新后的政策。</p>
+
+  <h2>九、联系我们</h2>
+  <p>对本政策有任何疑问，可通过以下方式联系开发者：</p>
+  <ul>
+    <li>GitHub Issues：<a href="https://github.com/HM-U3/vectorcraft-harmonyos/issues">github.com/HM-U3/vectorcraft-harmonyos/issues</a></li>
+    <li>电子邮箱：【请填写一个常用邮箱】</li>
+  </ul>
+
+  <footer>矢量工坊 · HarmonyOS 版 · 基于开源引擎 VectorCraft 构建，非官方移植版本。</footer>
+</main>
+</body>
+</html>

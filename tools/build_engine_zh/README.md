@@ -68,23 +68,34 @@ trunk build --release        # 产物在 dist/web（Trunk.toml 指定）
 
 ## 4. 相对上游源码的改动（全部改动）
 
-补丁文件：`engine-zh.patch`（相对 v0.12.0 的 main 分支，含 5 个文本文件改动；
+补丁文件：`engine-zh.patch`（相对 v0.12.0 的 main 分支，含 7 个文本文件改动；
 新增的字体二进制 `assets/fonts/NotoSansSC-Subset.ttf` 不入补丁，由第 4 节的脚本生成）。改动均为最小改动：
 
 | 文件 | 改动 | 原因 |
 |---|---|---|
-| `assets/fonts/NotoSansSC-Subset.ttf` | 新增，819 KB / 3369 字形 | Noto Sans SC 可变字体在 wght=400 处实例化后子集化：覆盖全部 i18n 词条表（`crates/ui-egui/src/i18n/*.tsv`，含 zh-hans / zh-hant）+ ASCII + 拉丁扩展 + 标点/箭头/数学符号 + CJK 标点与全角字符。字体名已改为 `VectorCraft Sans SC`（OFL 1.1 保留字体名合规） |
+| `assets/fonts/NotoSansSC-Subset.ttf` | 新增，855 KB / 3550 字形 | Noto Sans SC 可变字体在 wght=400 处实例化后子集化：覆盖全部 i18n 词条表（`crates/ui-egui/src/i18n/*.tsv`，含 zh-hans / zh-hant）**＋ 所有 Rust 字符串字面量里的汉字**（写死在源码里的品牌名等，见第 4 节）+ ASCII + 拉丁扩展 + 标点/箭头/数学符号 + CJK 标点与全角字符。字体名已改为 `VectorCraft Sans SC`（脚本内 `rename_family()` 强制执行） |
 | `crates/ui-egui/src/theme.rs` | `install_fonts()` 注册 `NotoSansSC` 并追加到所有字族回退链末尾 | 界面（菜单/面板/提示）的中文渲染；英文仍走 Inter / Source Sans 3 |
 | `crates/text/src/fontdb.rs` | `BUNDLED` 数组加入子集字体 | 文档文本的中文回退（文字工具输入中文） |
 | `apps/vectorcraft-web/src/web.rs` | 新增 `js_flag()`，`web_options()` / `detect_language()` 读取 `window.__VC_WEBGL` / `window.__VC_LANG` | 鸿蒙宿主经桥接下发渲染后端与界面语言；`resource://` 页面无法改写查询串，查询参数（`?webgl` / `?lang=`）保留原行为 |
 | `apps/vectorcraft-web/Trunk.toml` | 注释掉 `post_build` 钩子 | 该钩子会触发 host 侧 xtask 的 debug 编译，rustup 自带 MinGW 缺 `liblto_plugin.dll` 会失败；没有 `CRAFT_FONTS_DIR` 时它本是空操作 |
-| `crates/ui-egui/src/chrome.rs` | `app_bar()` 里品牌标的绘制条件加 `&& !cfg!(target_arch = "wasm32")` | Web/ArkWeb 端不画引擎自带的品牌标：18 pt 的图标孤悬在最左、与「文件/编辑/…」同一行，看着像按钮却点不动；品牌由原生外壳（侧栏展开态）呈现。桌面端行为不变，关于对话框仍显示 |
+| `crates/ui-egui/src/chrome.rs` | `app_bar()` 里品牌标的绘制条件加 `&& !cfg!(target_arch = "wasm32")`；应用栏不再显示 Discord 按钮 | Web/ArkWeb 端不画引擎自带的品牌标：18 pt 的图标孤悬在最左、与「文件/编辑/…」同一行，看着像按钮却点不动；品牌由原生外壳（侧栏展开态）呈现。桌面端行为不变，关于对话框仍显示 |
+| `crates/ui-egui/src/canvas.rs` | `home()` 首屏标题改为「矢量工坊」，并移除「社区」区块 | 应用名与首屏标题不一致，审核会判「名称与内容不符」；社区区块里的 Discord 在境内不可访问（属无效功能），另三个外链属站外导流 |
+| `crates/ui-egui/src/dialogs/about.rs` | 移除「关于」窗口中的社区与外链区块 | 同上；版本、许可证与致谢保留，署名上游属于许可要求 |
 
-子集化脚本：`gen_cjk_subset.py`（从 PhotoCraft 移植，扫描路径改为本仓库的 i18n 目录）：
+子集化脚本：`gen_cjk_subset.py`（从 PhotoCraft 移植，扫描路径改为本仓库）：
 
 ```bash
 python gen_cjk_subset.py --src <vectorcraft 源码根> --vf NotoSansSC-VF.ttf --out assets/fonts/NotoSansSC-Subset.ttf
 ```
+
+**字符集来源有两处，缺一个就会出豆腐块：**
+
+1. `crates/ui-egui/src/i18n/*.tsv` 全部语种词条；
+2. `crates/**/*.rs`、`apps/**/*.rs` 里字符串字面量中的汉字（`collect_rs_literals()`，注释不计入）。
+
+第 2 条是因为首屏品牌「矢量工坊」是直接写死在 `canvas.rs` 里的字面量，不走词条表。
+只扫词条表时「坊」不在子集内，界面会把它画成一个空心方框（`口`），
+看起来像错别字 —— 这个坑已经踩过一次，脚本现在会兜住。
 
 > 未改动 `.wasm` 之外的任何引擎逻辑；`?webgl` / `?lang=` 查询参数行为与上游完全一致。
 

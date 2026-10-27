@@ -1,4 +1,4 @@
-import { AppConstants, RenderModes } from '../common/Constants';
+import { AppConstants } from '../common/Constants';
 
 /**
  * 使用说明
@@ -10,7 +10,6 @@ import { AppConstants, RenderModes } from '../common/Constants';
 @Component
 struct Help {
   @StorageProp('deviceType') deviceType: string = 'phone';
-  @StorageProp('renderMode') renderMode: string = AppConstants.MODE_AUTO;
   @StorageProp('engineState') engineState: string = AppConstants.STATE_IDLE;
 
   private platformLabel(): string {
@@ -30,8 +29,9 @@ struct Help {
       Scroll() {
         Column() {
           this.Section('这是什么', [
-            '本应用是开源矢量插画编辑器 VectorCraft（WebAssembly 版）的鸿蒙客户端，' +
-              '并已做界面汉化：编辑引擎内嵌在安装包里，鸿蒙侧另外提供一层原生外壳。',
+            '本应用是开源矢量插画编辑器 VectorCraft 的鸿蒙原生客户端，并已做界面汉化：' +
+              '编辑引擎以原生库（libvectorcraft_native.so）编译进安装包，直接画在系统图形表面上，' +
+              '不含 WebView，也不加载 WebAssembly；鸿蒙侧另外提供一层原生外壳。',
             '界面文案全部为简体中文 —— 外壳（侧栏 / 顶栏 / 底栏、状态提示、本说明）由本工程编写；' +
               '编辑器内部的菜单、工具与面板名称来自上游官方简体中文语言包（zh-hans），' +
               '并内嵌了中文字体子集（Noto Sans SC），因此无需系统安装中文字体也能正常显示。',
@@ -63,12 +63,12 @@ struct Help {
             '为了能重新打开，应用会把文件另存一份副本在自身的沙箱里（所以会多占一点空间，' +
               '删除记录时副本一并删除）。卸载应用会同时清掉这些副本。',
             '注意：编辑器菜单里自带的「最近文件 / 打开最近使用的文件」是按文件路径记录的，' +
-              '在网页内核里没有真实路径，因此不可用 —— 请使用外壳上的「最近文件」面板。'
+              '鸿蒙沙箱里没有这类真实路径，因此不可用 —— 请使用外壳上的「最近文件」面板。'
           ])
 
           this.Section('外壳上的操作', [
-            '返回编辑器：重新加载内置首页。引擎内的「在 GitHub 上查看」等外链会交给系统浏览器' +
-              '打开，编辑器页面不会被顶掉；万一页面真的跑偏了，点这里就能回来，不需要退出应用。',
+            '返回首页：重启原生引擎并回到引擎首页。引擎里的外链会交给系统浏览器打开，' +
+              '不会把编辑器顶掉；万一编辑状态乱了，点这里就能回到干净的首页，不需要退出应用。',
             '渲染后端：切换引擎绘制图形的方式，切换后引擎会重新加载。',
             '重新加载引擎：不退出应用，直接重启编辑引擎。',
             '全屏显示：隐藏状态栏与导航栏，获得更大的画布（电脑上同时隐藏窗口标题栏）。',
@@ -83,19 +83,18 @@ struct Help {
             '拖拽窗口改变宽度时，界面会在三种形态之间实时切换；当前识别为：' + this.platformLabel() + '。'
           ])
 
-          this.Section('渲染后端怎么选', [
-            '自动：引擎自行选择，优先 WebGPU，不可用时回落 WebGL2。',
-            'WebGL2：兼容性最好。若启动后画布全黑或无法绘制，请优先选这一项。',
-            '当前设置：' + RenderModes.label(this.renderMode) + '（引擎状态：' + this.stateLabel() + '）'
+          this.Section('渲染方式', [
+            '引擎由 Rust 原生库直接绘制（wgpu · OpenGL ES），没有 WebView、没有 WebAssembly 加载环节。',
+            '启动速度只取决于系统能否创建 GL 上下文，通常半秒内出首帧。',
+            '当前引擎状态：' + this.stateLabel()
           ])
 
           this.Section('启动失败怎么办', [
-            '错误面板里有「重新加载」和「改用 WebGL2」两个按钮，先点后者。',
-            '「改用 WebGL2」会让引擎跳过 WebGPU，走兼容性更好的 WebGL2 路径。',
-            '仍然失败时，在 DevEco 的 Log 面板搜索 [VectorCraft]，' +
-              '可以看到引擎走的是哪条加载通道、卡在哪一步。',
-            '安装时报「no signature file」：工程需要签名，请在 ' +
-              'File → Project Structure → Signing Configs 中开启自动签名。'
+            '错误面板里有「重新加载」和「重新启动引擎」两个按钮，先点后者。',
+            '「重新启动引擎」会先停掉渲染线程再原地拉起，能解决大部分一次性初始化失败。',
+            '侧栏 / 顶栏的「重新加载引擎」可以在不退出应用的情况下重启引擎，值得多试一次。',
+            '仍然无法启动时，请记录设备型号、系统版本与出错前的操作，到项目仓库提交 Issue：' +
+              'github.com/HM-U3/vectorcraft-harmonyos/issues'
           ])
 
           this.Section('已知限制', [
@@ -110,14 +109,28 @@ struct Help {
               '需要打印时请先导出 PDF，再用系统 PDF 查看器打印。'
           ])
 
+          this.Section('隐私说明', [
+            '本应用不收集、不上传任何个人信息：没有账号体系，也不含统计、广告、推送等第三方 SDK。',
+            '引擎、字体、图标全部内嵌在安装包内，应用运行时不发起任何网络请求；' +
+              '点「在 GitHub 上查看」等外链时由系统浏览器打开，不向应用回传数据。',
+            '未申请任何权限：相机、麦克风、位置、通讯录、存储、网络等权限均未声明，安装后即可使用全部功能。',
+            '作品与「最近文件」只存在本机：文件副本位于应用沙箱（files/recents），' +
+              '列表记录位于应用本地存储；卸载应用即一并删除，开发者与其他应用都无法读取。',
+            '导出的文件写入你通过系统「保存到」选择器指定的位置，应用不会扫描或读取其他目录。',
+            '内嵌的第三方组件为开源引擎 VectorCraft（MIT / Apache-2.0）与 Noto Sans SC 字体子集（OFL 1.1），' +
+              '两者均不含数据采集代码。',
+            '如对隐私有疑问，可在项目仓库提交 Issue：github.com/HM-U3/vectorcraft-harmonyos/issues'
+          ])
+
           this.Section('版本与许可', [
-            '客户端版本：1.0.0',
-            '编辑引擎：VectorCraft 0.12.0（上游 main 分支源码重新编译，WebAssembly，MIT / Apache-2.0 双许可）',
+            '客户端版本：2.0.0',
+            '编辑引擎：VectorCraft 0.16.0（上游 v0.16.0 源码交叉编译为鸿蒙原生库，MIT / Apache-2.0 双许可）',
             '引擎改动：默认加载简体中文语言包；内嵌 Noto Sans SC 子集字体（OFL 1.1，已改名）；' +
-              '并新增了宿主配置注入（渲染后端 / 界面语言的 window 全局变量）',
+              '新增了一个不依赖 eframe 的鸿蒙原生宿主（surface 输入转发、系统文件选择器对接）',
             '上游项目：storytold/vectorcraft',
-            '本客户端仅做本地适配，引擎相对上游只做了三处最小改动（默认语言、字体注册与字族回退链、' +
-              '宿主全局变量读取）；应用图标与本页内容由本工程原创。'
+            '本客户端仅做本地适配，引擎相对上游只做了最小改动（默认语言、字体注册与字族回退链、' +
+              '原生宿主对接，以及按应用市场要求移除首屏与应用栏的社区外链）；' +
+              '应用图标与本页内容由本工程原创。'
           ])
 
           Blank().height(24)

@@ -16,8 +16,7 @@ export default class EntryAbility extends UIAbility {
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     console.info('[VectorCraft] onCreate');
-    // 渲染后端与界面语言需要跨启动保持
-    PersistentStorage.persistProp(AppConstants.KEY_RENDER_MODE, AppConstants.MODE_AUTO);
+    // 界面语言需要跨启动保持
     PersistentStorage.persistProp(AppConstants.KEY_LANG, AppConstants.LANG_ZH_HANS);
     AppStorage.setOrCreate(AppConstants.KEY_ENGINE_STATE, AppConstants.STATE_IDLE);
     AppStorage.setOrCreate(AppConstants.KEY_ENGINE_MESSAGE, '');

@@ -50,8 +50,8 @@
 | 鸿蒙平板 | 600vp ≤ 宽 < 840vp | 顶部工具栏（48vp） |
 | 鸿蒙手机 / 小窗 | 宽 < 600vp | 底部悬浮胶囊按钮组 |
 
-编辑区始终是**同一个 Web 组件实例**，切换形态只改变其内边距 ——
-不会因为拖动窗口而重新加载六十多 MB 的引擎。
+编辑区始终是**同一个 XComponent 表面**，切换形态只改变它的内边距并触发一次
+`native.resize` —— 不会因为拖动窗口而重建引擎或丢失正在编辑的文档。
 
 ## 四、环境要求
 
@@ -62,7 +62,10 @@
 | 开发工具 | DevEco Studio 6.1.1（hvigor 6.24.4 下验证通过） |
 | 第三方依赖 | 无，`oh-package.json5` 为空，Sync 不需要联网装包 |
 
-> 引擎本体 `.wasm` 约 62 MB，已直接放在仓库里（未用 Git LFS，clone 即可用）。
+> 引擎以原生库 `entry/libs/arm64-v8a/libvectorcraft_native.so` 的形式放在仓库里
+> （strip 后约 78 MB，未用 Git LFS）。它的源码在
+> [vectorcraft 上游](https://github.com/storytold/vectorcraft) 的 `apps/vectorcraft-ohos`，
+> 重编译方法见 [`tools/build_engine_native/README.md`](tools/build_engine_native/README.md)。
 
 ## 五、快速开始
 
@@ -104,59 +107,56 @@ vectorcraft-harmonyos/
 │       ├── module.json5                 deviceTypes: phone / tablet / 2in1
 │       ├── ets/
 │       │   ├── entryability/EntryAbility.ets   入口：状态初始化、页面加载、窗口尺寸监听
-│       │   ├── common/Constants.ets            常量与渲染后端枚举
-│       │   ├── common/ResourceBridge.ets       javaScriptProxy 桥（配置下发 / 状态回调 / 资源兜底 / 保存 / 外链）
+│       │   ├── common/Constants.ets            常量（布局断点、AppStorage 键、状态枚举）
 │       │   ├── common/RecentStore.ets          最近文件：Preferences + 沙箱副本，持久化保存记录
-│       │   ├── pages/Index.ets                 主页面：ArkWeb + 自适应原生外壳
+│       │   ├── pages/Index.ets                 主页面：XComponent 原生渲染 + 自适应原生外壳
 │       │   └── pages/Help.ets                  内置「使用说明」页
-│       └── resources/
-│           ├── base/media/                     应用图标（分层图）与界面 SVG 图标
-│           ├── dark/element/color.json         深色主题色
-│           └── rawfile/vectorcraft/           ← 引擎资源
-│               ├── index.html                       已改写：加载容错 + 进度 + 错误页 + 保存/外链接管
-│               ├── vectorcraft-web-<hash>.classic.js 经典脚本胶水层（鸿蒙实际加载的）
-│               ├── vectorcraft-web-<hash>.js         上游 ESM 胶水层（保留备查）
-│               └── vectorcraft-web-<hash>_bg.wasm    中文引擎本体（约 65 MB）
+│       ├── resources/
+│       │   ├── base/media/                     应用图标（分层图）与界面 SVG 图标
+│       │   └── dark/element/color.json         深色主题色
+│       └── libs/arm64-v8a/
+│           └── libvectorcraft_native.so       ← 引擎本体（Rust 原生库，约 78 MB）
 ├── tools/
 │   ├── build_engine_zh/                 引擎重编译配方（不参与打包）
 │   │   ├── README.md                    完整步骤 + 已知坑
 │   │   ├── engine-zh.patch              相对上游的全部改动
 │   │   ├── gen_cjk_subset.py            Noto Sans SC 子集化
 │   │   └── fonts/LICENSE-NotoSansSC.txt Noto Sans SC 的 OFL 1.1 许可
-│   ├── pack_web.py                      trunk 产物 → rawfile 打包 + ESM 转经典脚本
+│   ├── build_engine_native/             原生引擎交叉编译脚本（build_ohos.sh）
 │   ├── check-before-publish.py          提交前自查（签名路径、口令、本机绝对路径）
+│   ├── check-market-ready.py            上架前自查（bundleName/权限/签名类型/图标/引擎库）
 │   └── local-signing.py                 本地签名开关（on / off / status）
 ├── LICENSE-MIT / LICENSE-APACHE
 ├── hvigor/hvigor-config.json5           hvigor 配置（modelVersion 必须与 oh-package.json5 一致）
 └── build-profile.json5 / hvigorfile.ts / oh-package.json5 / code-linter.json5
 ```
 
-## 七、渲染后端
+## 七、渲染方式
 
-| 后端 | 说明 |
-|---|---|
-| 自动（默认） | 优先 WebGPU，不可用时回落到 WebGL2 |
-| WebGL2 | 兼容性最好，平板与手机推荐 |
-
-切换入口在侧栏 / 顶栏 / 底栏的「渲染后端」，选择后引擎自动重启，设置跨启动保持。
+引擎以原生库形式运行，只有一条渲染路径：**wgpu › OpenGL ES**，直接画在 XComponent 的
+surface 上（本机实测 `Maleoon 916B`，60 fps、0 丢帧）。没有 WebGPU / WebGL2 / wasm 之分，
+因此旧版的「渲染后端」切换面板已移除。
 
 ## 八、实现要点
 
-移植过程中主要解决的是「浏览器里能跑、鸿蒙 Web 组件里跑不起来」这一类差异。简单说：
+早期版本走的是「WebView + wasm」路线；v1.1 起改为**原生渲染**，不再有 WebView、
+wasm、HTML 启动页。现在的结构是：
 
-1. **引擎加载三层容错** —— `resource://rawfile` 协议下各设备对 `fetch` / `XHR` 的支持不一致，
-   页面依次尝试 `fetch` → `XMLHttpRequest` → 原生分块通道（ArkTS 读 rawfile 后按 1 MiB base64 回传）。
-   三层都失败时显示错误详情，并提供「重新加载 / 改用 WebGL2」入口。
-2. **胶水层改用经典脚本** —— ArkWeb 的 ES Module 加载器不支持 `resource://`，
-   于是把 `wasm-bindgen` 的 ESM 胶水层等价转换成经典脚本内联注入，不改动引擎逻辑。
-3. **宿主配置经 window 全局变量下发** —— 引擎的 `?webgl` / `?lang=` 依赖 `location.search`，
-   而 `resource://` 页面无法改写自己的查询串；鸿蒙外壳的渲染后端选项因此改为经
-   `window.__VC_WEBGL` / `__VC_LANG` 注入（引擎侧对应补丁读取这两个全局变量）。
-4. **中文字体与语言** —— 引擎从源码重编译：内嵌 Noto Sans SC 子集（已改名避开 OFL 保留字体名）、
-   默认简体中文界面；子集覆盖全部上游 i18n 词条表用字。
-5. **保存 / 导出与外链** —— 引擎原本依赖浏览器的 `<a download>` 与 `window.open`，
-   ArkWeb 两者都不处理。现在由 `index.html` 拦下并转交原生：保存走系统选择器，
-   外链交给系统浏览器，编辑器页面不会被顶掉。
+1. **引擎宿主** —— `apps/vectorcraft-ohos`（cdylib）用
+   `OH_NativeWindow_CreateNativeWindowFromSurfaceId` 拿到 XComponent 的 surface，
+   经 `raw-window-handle` 的 `OhosNdkWindowHandle` 交给 wgpu（GLES 后端），
+   再由 egui 每帧 `ctx.run_ui()` 自绘。ArkTS 侧只剩 `start / stop / resize` 和输入转发。
+2. **系统能力代理** —— 引擎里的「打开 / 置入 / 导出 / 外链」在 Rust 侧排成请求队列，
+   ArkTS 每 80 ms `takeRequests()` 取走：打开与置入弹 `DocumentViewPicker`，
+   导出写进沙箱 `filesDir/exports/` 后再弹保存选择器，外链交给系统浏览器。
+3. **中文字体** —— 引擎从源码重编译：内嵌 Noto Sans SC 子集（已改名避开 OFL 保留字体名）、
+   默认简体中文；子集除了扫 i18n 词条表，还会扫源码里的字符串字面量（否则写死的中文会缺字）。
+   另在 OHOS 上把系统自带的中文字库挂进字体库兜底，输入中文时不会出现豆腐块。
+4. **最近文件** —— 引擎自带的「最近」基于文件路径，鸿蒙沙箱里无解；因此保存成功时
+   由外壳在 `filesDir/<recent>/` 留一份副本并用 Preferences 记元数据，杀进程后仍可重开。
+5. **删除 Web 壳套** —— `rawfile/vectorcraft/`（index.html + 胶水层 + 65 MB wasm）、
+   `ResourceBridge.ets`、`tools/pack_web.py` 与「渲染后端」面板全部移除；
+   安装包里只剩原生库。
 
 上述每一条的**现象、根因、验证数据**都会随迭代记录在 [`docs/technical-notes.md`](docs/technical-notes.md)。
 

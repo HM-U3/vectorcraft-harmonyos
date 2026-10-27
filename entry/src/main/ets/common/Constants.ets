@@ -1,43 +1,29 @@
 /**
  * 全局常量与配置
+ *
+ * 引擎由 Rust 原生库（libvectorcraft_native.so）通过 wgpu/GLES 直接画进 XComponent，
+ * 不再有 WebView / wasm，因此这里只保留宿主外壳需要的常量。
  */
 
 export class AppConstants {
-  /** 内置 Web 应用入口（打包在 resources/rawfile/vectorcraft 下） */
-  static readonly WEB_ENTRY: string = 'resource://rawfile/vectorcraft/index.html';
-
-  /** rawfile 协议前缀 */
-  static readonly RAW_PREFIX: string = 'resource://rawfile/';
-
-  /** rawfile 中 Web 应用的根目录 */
-  static readonly RAW_ROOT: string = 'vectorcraft/';
-
-  /** 界面语言（BCP 47，与上游 i18n 目录一致；auto = 跟随系统） */
-  static readonly LANG_AUTO: string = 'auto';
+  /** 界面语言（BCP 47，与上游 i18n 目录一致；引擎启动时由宿主传入系统语言） */
   static readonly LANG_ZH_HANS: string = 'zh-hans';
 
   /** 布局断点（vp） */
   static readonly BREAKPOINT_MEDIUM: number = 600;
   static readonly BREAKPOINT_WIDE: number = 840;
 
-  /** 渲染后端取值（wgpu on web：WebGPU 优先，不可用回落 WebGL2；webgl = 强制 WebGL2） */
-  static readonly MODE_AUTO: string = 'auto';
-  static readonly MODE_WEBGL: string = 'webgl';
-
   /** AppStorage 键名 */
   static readonly KEY_ENGINE_STATE: string = 'engineState';
   static readonly KEY_ENGINE_MESSAGE: string = 'engineMessage';
-  static readonly KEY_RENDER_MODE: string = 'renderMode';
   static readonly KEY_LANG: string = 'uiLang';
   static readonly KEY_WIN_W: string = 'winWidthVp';
   static readonly KEY_WIN_H: string = 'winHeightVp';
   static readonly KEY_DEVICE_TYPE: string = 'deviceType';
   static readonly KEY_MAIN_WINDOW: string = 'mainWindow';
 
-  /** 保存/导出结果提示（由原生桥写入，Index 弹 toast 展示） */
+  /** 保存/导出结果提示（由保存流程写入，Index 弹 toast 展示） */
   static readonly KEY_SAVE_STATUS: string = 'saveStatus';
-  /** 保存块大小上限（字节），JS 侧按此切片后逐块交给原生 */
-  static readonly SAVE_CHUNK_MAX: number = 512 * 1024;
 
   /** 引擎状态 */
   static readonly STATE_IDLE: string = 'idle';
@@ -46,27 +32,9 @@ export class AppConstants {
   static readonly STATE_ERROR: string = 'error';
 }
 
-export interface RenderOption {
-  value: string;
-  label: string;
-  desc: string;
-}
-
-export class RenderModes {
-  static all(): RenderOption[] {
-    return [
-      { value: AppConstants.MODE_AUTO, label: '自动', desc: '优先 WebGPU，不可用时回落 WebGL2' },
-      { value: AppConstants.MODE_WEBGL, label: 'WebGL2', desc: '兼容性最好，平板/手机推荐' }
-    ];
-  }
-
-  static label(value: string): string {
-    const list = RenderModes.all();
-    for (let i = 0; i < list.length; i++) {
-      if (list[i].value === value) {
-        return list[i].label;
-      }
-    }
-    return '自动';
-  }
+/** XComponent 表面尺寸（像素）与 DPI 缩放系数，原样交给 Rust 的 start/resize。 */
+export interface SurfaceMetrics {
+  width: number;
+  height: number;
+  dpi: number;
 }

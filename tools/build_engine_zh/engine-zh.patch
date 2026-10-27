@@ -65,8 +65,34 @@ index c37ca8e..fe9118f 100644
  ];
  /// Without `bundled-fonts` a database starts with none: the embedder adds its fonts
  /// ([`FontDb::add_font`]); until then text has no glyphs.
+diff --git a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
+index cbfa68d..b7b6a42 100644
+--- a/crates/ui-egui/src/canvas.rs
++++ b/crates/ui-egui/src/canvas.rs
+@@ -2612,7 +2612,8 @@ fn home(app: &mut VectorcraftApp, ui: &mut Ui, rect: egui::Rect) {
+     let inner = rect.shrink2(vec2((rect.width() - 820.0).max(40.0) / 2.0, 60.0));
+     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
+     let ui = &mut child;
+-    ui.label(egui::RichText::new(tl!("Welcome to VectorCraft")).font(theme::semibold(26.0)).color(t.text));
++    // HarmonyOS 版：首屏直接呈现客户端品牌，避免「应用名 = 矢量工坊、首页却是别人的名字」。
++    ui.label(egui::RichText::new("矢量工坊").font(theme::semibold(26.0)).color(t.text));
+     ui.add_space(4.0);
+     ui.label(egui::RichText::new(tl!("Vector illustration — fast, open, scriptable.")).size(14.0).color(t.text_dim));
+     ui.add_space(22.0);
+@@ -2641,9 +2642,8 @@ fn home(app: &mut VectorcraftApp, ui: &mut Ui, rect: egui::Rect) {
+         }
+     });
+     ui.add_space(28.0);
+-    ui.label(egui::RichText::new(tl!("Community")).font(theme::semibold(14.0)).color(t.text));
+-    ui.add_space(10.0);
+-    crate::community::links(app, ui);
++    // 鸿蒙版移除「社区」区块：Discord 在境内不可访问（审核会判无效功能），
++    // 网站 / 应用页 / GitHub 三个外链也属站外导流，统一由原生「关于本应用」页承载。
+ }
+ 
+ /// The Home screen's Recent Files (#663): the first of File › Open Recent Files, each its name and
 diff --git a/crates/ui-egui/src/chrome.rs b/crates/ui-egui/src/chrome.rs
-index b49b998..a2ce0b6 100644
+index b49b998..8035de9 100644
 --- a/crates/ui-egui/src/chrome.rs
 +++ b/crates/ui-egui/src/chrome.rs
 @@ -39,7 +39,10 @@ pub fn app_bar(app: &mut VectorcraftApp, ui: &mut Ui) {
@@ -81,6 +107,29 @@ index b49b998..a2ce0b6 100644
                  let (r, _) = ui.allocate_exact_size(vec2(MARK, MARK), Sense::hover());
                  crate::brand::paint_mark(ui, r);
                  ui.add_space(6.0);
+@@ -68,7 +71,8 @@ pub fn app_bar(app: &mut VectorcraftApp, ui: &mut Ui) {
+             let icon = 28.0;
+             let search = room >= 64.0 + 8.0 + gap + icon;
+             let ws_w = ws_w.min(room - 8.0 - gap - if search { icon } else { 0.0 }).max(64.0);
+-            let discord = search && room >= ws_w + 8.0 + gap + icon + 10.0 + gap + crate::community::discord_width(ui, false);
++            // 鸿蒙版不显示 Discord 入口：境内无法访问，且属站外社群导流。
++            let discord = false;
+             let mut rui = ui.new_child(egui::UiBuilder::new().max_rect(right).layout(egui::Layout::right_to_left(egui::Align::Center)));
+             let ui = &mut rui;
+             // Workspace switcher: shows the current workspace, opens Window → Workspace.
+diff --git a/crates/ui-egui/src/dialogs/about.rs b/crates/ui-egui/src/dialogs/about.rs
+index af248d1..532ebe5 100644
+--- a/crates/ui-egui/src/dialogs/about.rs
++++ b/crates/ui-egui/src/dialogs/about.rs
+@@ -60,7 +60,7 @@ fn about_tab(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
+         });
+     });
+     ui.add_space(12.0);
+-    crate::community::links(app, ui);
++    // 鸿蒙版移除社区与外链区块：Discord 境内不可访问，其余链接由原生「关于本应用」页承载。
+     ui.add_space(12.0);
+     ui.label(
+         egui::RichText::new(tl!(
 diff --git a/crates/ui-egui/src/theme.rs b/crates/ui-egui/src/theme.rs
 index 1f57885..88da931 100644
 --- a/crates/ui-egui/src/theme.rs

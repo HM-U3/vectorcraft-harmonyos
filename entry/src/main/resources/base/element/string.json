@@ -17,10 +17,6 @@
       "value": "使用说明"
     },
     {
-      "name": "permission_internet_reason",
-      "value": "用于在兼容模式下加载内置编辑引擎与导出图像"
-    },
-    {
       "name": "loading_title",
       "value": "正在启动矢量工坊"
     },

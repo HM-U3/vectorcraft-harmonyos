@@ -2,6 +2,11 @@
 
 移植细节、缺陷根因与验证数据。README 面向使用者，这份文档面向要改代码或提 PR 的人。
 
+> **v1.1 重大变更：已去掉 Web 壳套，改为原生渲染。**
+> 第 1–3 章里关于 wasm / ArkWeb / rawfile / 渲染后端的内容属于 v1.0 的历史记录，
+> 保留是为了说明当时为什么那样做、踩过哪些坑；现行架构见
+> [第 6 章](#6-v11-原生渲染架构现状)。
+
 ## 目录
 
 1. [上游调研结论](#1-上游调研结论)
@@ -9,6 +14,7 @@
 3. [鸿蒙适配细节](#3-鸿蒙适配细节)
 4. [验证数据](#4-验证数据)
 5. [提交前自查](#5-提交前自查)
+6. [v1.1 原生渲染架构（现状）](#6-v11-原生渲染架构现状)
 
 ---
 
@@ -72,7 +78,7 @@
 
 | # | 文件 | 改动 | 原因 |
 |---|---|---|---|
-| 1 | `assets/fonts/NotoSansSC-Subset.ttf` | 新增，839 KB / 3369 字形 | Noto Sans SC VF 在 wght=400 实例化后子集化：覆盖全部 i18n 词条表 + ASCII + 拉丁扩展 + 标点/箭头/数学符号 + CJK 标点全角；字体名改为 `VectorCraft Sans SC`（OFL 保留字体名合规） |
+| 1 | `assets/fonts/NotoSansSC-Subset.ttf` | 新增，855 KB / 3550 字形 | Noto Sans SC VF 在 wght=400 实例化后子集化：覆盖全部 i18n 词条表 **＋ 源码里写死的汉字** + ASCII + 拉丁扩展 + 标点/箭头/数学符号 + CJK 标点全角；字体名改为 `VectorCraft Sans SC`（由脚本 `rename_family()` 执行） |
 | 2 | `crates/ui-egui/src/theme.rs` | `install_fonts()` 注册 `NotoSansSC`，并把它 push 到所有字族回退链末尾 | 界面（菜单/面板/提示）中文渲染；英文仍走 Inter / Source Sans 3 |
 | 3 | `crates/text/src/fontdb.rs` | `BUNDLED` 数组加入子集字体 | 文档文本（文字工具）的中文回退 |
 | 4 | `apps/vectorcraft-web/src/web.rs` | 新增 `js_flag()`；`web_options()` 增加 `__VC_WEBGL` 判断，`detect_language()` 增加 `__VC_LANG` | 宿主经桥接下发渲染后端与界面语言；`?webgl` / `?lang=` 查询参数行为保留 |
@@ -80,14 +86,22 @@
 ### 2.3 字体子集
 
 ```
-[1/3] character set: 4412 unique chars
+[1/3] character set: 4581 unique chars
 [2/3] instantiating VF at wght=400 ...
 [3/3] subsetting ...
-done: 838,988 bytes (819 KiB), 3369 glyphs, 1468 Han chars
+done: 875,912 bytes (855 KiB), 3550 glyphs, 1637 Han chars
+      family: VectorCraft Sans SC / VectorCraftSansSC
 ```
 
-子集化脚本 `gen_cjk_subset.py` 扫描 `crates/ui-egui/src/i18n/*.tsv` 的全部词条
-（25 种语言，含 zh-hans 2067 行、zh-hant、ja、ko…），因此新增语言会自动扩大子集。
+子集化脚本 `gen_cjk_subset.py` 有两个字符来源，缺一个就会出豆腐块：
+
+1. `crates/ui-egui/src/i18n/*.tsv` 的全部词条（25 种语言，含 zh-hans 2067 行、zh-hant、ja、ko…），
+   新增语言会自动扩大子集；
+2. `crates/**/*.rs`、`apps/**/*.rs` 中字符串字面量里的汉字（`collect_rs_literals()`，先剥掉注释再取字面量）。
+
+第 2 条是踩坑后补的：首屏品牌「矢量工坊」写死在 `canvas.rs` 里、不走词条表，
+只扫词条表时「坊」不在子集内，渲染成一个空心方框（看着像「口」字）——
+界面出现「矢量工口」这种“错别字”，本质是缺字形而不是文案错。
 
 ### 2.4 trunk 的 post_build 钩子
 
@@ -424,3 +438,51 @@ if !system && !cfg!(target_arch = "wasm32") {
 
 **验证**：装机后放大截图 —— 菜单栏从房子按钮（Home）直接开始，图案消失；
 再点「最近文件」打开 `Untitled-2.vectorcraft`，标签页、画板、属性面板全部正常。
+
+---
+
+## 6. v1.1 原生渲染架构（现状）
+
+### 6.1 为什么换掉 Web 壳套
+
+Web 路线能跑（60 fps），但代价明显：65 MB wasm + 38 万行 JS 胶水层 + 一套三层 fetch 容错，
+启动要编译 wasm、保存要合成 drop 事件、渲染后端还得做「WebGPU 不可用回落 WebGL2」的分支。
+PhotoCraft 2.0 已经验证「Rust 直接画 XComponent」这条路可行，VectorCraft 依样重做，
+最终把整条 Web 链路从工程里删掉，安装包从「65 MB wasm + HTML」变成单个原生库。
+
+### 6.2 结构
+
+| 层 | 位置 | 职责 |
+|---|---|---|
+| NDK 桥 | `apps/vectorcraft-ohos/src/ndk.rs` | `OH_NativeWindow_CreateNativeWindowFromSurfaceId`、`OH_LOG_Print` |
+| napi 导出 | `apps/vectorcraft-ohos/src/lib.rs` | `start/stop/resize/touch/mouse/wheel/key/imeText/imeBackspace/wantsTextInput/openFile/placeFile/takeRequests/setDataDir` |
+| 渲染线程 | 同上 `run()` | wgpu(Gl) surface → `egui::Context::run_ui` → `app.logic` / `app.ui` → tessellate → `egui_wgpu::Renderer` |
+| 系统能力 | 同上 `build_services()` | `open_async`/`place_async` → 请求队列；`download` → 写 `filesDir/exports/` + `saveAs:<name>`；`open_url` → `openUrl:<url>` |
+| 外壳 | `entry/src/main/ets/pages/Index.ets` | XComponent(SURFACE) + 输入转发 + 80 ms 轮询 `takeRequests()` + 侧栏/顶栏/底栏 |
+
+### 6.3 关键约束（踩过的坑）
+
+1. **链接器只能写在 `.cargo/config.toml`**。`CC_aarch64_unknown_linux_ohos` 只影响 C 依赖的编译，
+   Rust 自己的链接器要 `[target.aarch64-unknown-linux-ohos].linker`，
+   并补 `-lnative_window`、`-lhilog_ndk.z`，否则报 `linker 'cc' not found`。
+2. **工作区的 `unsafe_code = "deny"` 会挡住 NDK FFI**。宿主 crate 用
+   `[lints.rust] unsafe_code = "allow"` 单独放开；`[lints] workspace = true` 不能与其它 lints 表共存。
+3. **crates.io 的 egui 0.36.2 与 photocraft 用的 fork 有差异**：
+   `Event::MouseWheel` 只有 `unit/delta/phase/modifiers`，没有 `source`。
+4. **napi-rs 把 snake_case 导出成 camelCase**。ArkTS 侧必须写 `native.setDataDir(...)`；
+   写成 `native.set_data_dir(...)` 会在真机上抛 `TypeError: undefined is not callable` 并直接崩进程。
+5. **`onAxisEvent` / `AxisAction` 是 API 17 起才有的**，工程 compatibleSdkVersion 为 5.0(12)，
+   编译只给 WARN，实机上滚轮可用，但老设备需注意降级。
+6. **右侧菜单栏点击**：工具栏按钮（新建/打开）用合成触摸事件可点，引擎下拉菜单在合成事件下不稳定，
+   需要用真实手指验证。
+
+### 6.4 验证记录（HONOR 平板，Maleoon 916B）
+
+| 项 | 结果 |
+|---|---|
+| 引擎启动 | `surface 2980x1934 @2.20x, Rgba8UnormSrgb, present Fifo`，`start -> true` |
+| 帧率 | `presented 4680 frames (skipped 0)`，状态栏 60 fps |
+| 中文渲染 | 首页「矢量工坊」、菜单、对话框全部正常，无缺字 |
+| 触摸 | 首页按钮、快速新建、文档对话框、外壳侧栏、最近文件面板均可点 |
+| 系统能力 | 点「打开」弹出系统文件选择器且后缀过滤为 `.svg` |
+| 体积 | `libvectorcraft_native.so` strip 后 78 MB；HAP 82 MB |

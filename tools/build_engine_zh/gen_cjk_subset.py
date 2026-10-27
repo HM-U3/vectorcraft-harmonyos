@@ -20,20 +20,31 @@ Usage
     pip install fonttools brotli
     python gen_cjk_subset.py --src <SRC_ROOT> --vf NotoSansSC-VF.ttf --out NotoSansSC-Regular-Subset.ttf
 
-`--src` is the PhotoCraft checkout; all `crates/ui-egui/src/i18n/*.tsv` catalogs
-are scanned so that adding a language later automatically widens the subset.
+`--src` is the PhotoCraft / VectorCraft checkout; all `crates/ui-egui/src/i18n/*.tsv`
+catalogs are scanned, plus every Han character appearing inside a Rust string
+literal, so that adding a language later — or hard-coding a client brand in the
+UI — automatically widens the subset instead of silently producing tofu boxes.
 
 Font: Noto Sans SC — SIL Open Font License 1.1 (`fonts/LICENSE-NotoSansSC.txt`).
 """
 
 import argparse
 import glob
+import io
 import os
+import re
 import sys
 
 from fontTools import subset
 from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
+
+
+# A Rust string literal is not necessarily escaped; taking the text between the
+# first and last quote of a line is enough to catch the Han characters we care
+# about (catalogs use `\t`, so anything on the line matters).
+_RS_LITERAL = re.compile(r'"([^"\n]*)"')
+_HAN = re.compile(r"[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]")
 
 
 # Characters that are safe/necessary to always keep, regardless of catalogs.
@@ -76,7 +87,68 @@ def collect_chars(src_root: str) -> set:
                 if "\t" in line:
                     line = line.split("\t", 1)[1]
                 chars.update(line)
+    chars.update(collect_rs_literals(src_root))
     return chars
+
+
+def collect_rs_literals(src_root: str) -> set:
+    """Han characters baked into Rust string literals (i.e. not in a catalog).
+
+    The HarmonyOS port puts the client's own brand on the Home screen as a plain
+    literal, and anything written like that bypasses the i18n catalogs above — so
+    it has to be picked up here or it renders as a tofu box.  Comments are ignored
+    on purpose (they never reach the rasterizer) so the subset stays small.
+    """
+    chars = set()
+    patterns = ["crates/**/*.rs", "apps/**/*.rs"]
+    files = []
+    for pat in patterns:
+        files.extend(glob.glob(os.path.join(src_root, pat), recursive=True))
+    for path in files:
+        try:
+            with io.open(path, "r", encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        # strip // line comments and /* */ blocks before scanning for literals
+        text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        text = re.sub(r"//[^\n]*", "", text)
+        for lit in _RS_LITERAL.findall(text):
+            chars.update(_HAN.findall(lit))
+    if not files:
+        print(f"[warn] no Rust sources found under {src_root}", file=sys.stderr)
+    return chars
+
+
+def rename_family(font: TTFont, family: str) -> None:
+    """Give the subset its own family name.
+
+    The subset is a derivative of Noto Sans SC; shipping it under the upstream
+    family name would make it indistinguishable from the untouched font (and in
+    conflict with any system install of it).  Renaming is also what the OFL asks
+    for when a font is modified and its original name is reserved.
+    """
+    ps = family.replace(" ", "")
+    for rec in list(font["name"].names):
+        try:
+            val = rec.toUnicode()
+        except Exception:
+            continue
+        if rec.nameID == 1:
+            rec.string = family
+        elif rec.nameID == 3:
+            rec.string = f"{ps};{ps}-Regular;subset"
+        elif rec.nameID == 4:
+            rec.string = family
+        elif rec.nameID == 6:
+            rec.string = ps
+        elif rec.nameID == 16:
+            rec.string = family
+        elif rec.nameID == 17:
+            rec.string = "Regular"
+        else:
+            continue
+        # keep the platform/encoding, only the payload changes
 
 
 def main() -> int:
@@ -85,6 +157,7 @@ def main() -> int:
     ap.add_argument("--vf", required=True, help="NotoSansSC-VF.ttf (variable font)")
     ap.add_argument("--out", required=True, help="output subset TTF path")
     ap.add_argument("--wght", type=float, default=400.0)
+    ap.add_argument("--family", default="VectorCraft Sans SC", help="family name for the derivative")
     args = ap.parse_args()
 
     chars = collect_chars(args.src)
@@ -110,6 +183,7 @@ def main() -> int:
     sub = subset.Subsetter(options=opts)
     sub.populate(unicodes=[ord(c) for c in chars])
     sub.subset(font)
+    rename_family(font, args.family)
     font.save(args.out)
 
     n_glyphs = len(font.getGlyphOrder())
@@ -117,6 +191,7 @@ def main() -> int:
     size = os.path.getsize(args.out)
     print(f"done: {args.out}")
     print(f"      {size:,} bytes ({size / 1024:.0f} KiB), {n_glyphs} glyphs, {n_han} Han chars")
+    print(f"      family: {font['name'].getDebugName(1)} / {font['name'].getDebugName(6)}")
     try:
         os.remove(tmp)
     except OSError as e:
