@@ -63,9 +63,10 @@
 | 第三方依赖 | 无，`oh-package.json5` 为空，Sync 不需要联网装包 |
 
 > 引擎以原生库 `entry/libs/arm64-v8a/libvectorcraft_native.so` 的形式放在仓库里
-> （strip 后约 78 MB，未用 Git LFS）。它的源码在
-> [vectorcraft 上游](https://github.com/storytold/vectorcraft) 的 `apps/vectorcraft-ohos`，
-> 重编译方法见 [`tools/build_engine_native/README.md`](tools/build_engine_native/README.md)。
+> （strip 后约 78 MB，未用 Git LFS）。**鸿蒙原生宿主的源码就在本仓库的
+> [`engine/vectorcraft-ohos/`](engine/vectorcraft-ohos/)**（上游没有这个目录，是本项目新写的），
+> 引擎侧的中文化改动是 [`tools/build_engine_zh/engine-zh.patch`](tools/build_engine_zh/engine-zh.patch)。
+> 从零重建的完整步骤见 [`engine/README.md`](engine/README.md)。
 
 ## 五、快速开始
 

@@ -1,0 +1,30 @@
+[package]
+name = "vectorcraft-ohos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "VectorCraft native HarmonyOS module: wgpu (GLES/EGL) + egui on an XComponent surface"
+
+# 平台宿主 crate 必须直连 NDK（surface 转 OHNativeWindow、hilog），unsafe 不可避免，
+# 因此不继承工作区的 `unsafe_code = "deny"`（工作区规则针对可移植的引擎/UI 代码）。
+[lints.rust]
+unsafe_code = "allow"
+
+[lib]
+name = "vectorcraft_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+vectorcraft-engine = { workspace = true }
+# The editor UI, unchanged: it takes no eframe dependency, the host drives logic/ui itself.
+vectorcraft-ui-egui = { workspace = true }
+egui = { workspace = true }
+egui-wgpu = { version = "0.36", default-features = false }
+wgpu = { version = "30", default-features = false, features = ["std", "gles", "wgsl"] }
+raw-window-handle = "0.6"
+pollster = "0.4"
+napi-ohos = "1.2"
+napi-derive-ohos = "1.2"
+
+[build-dependencies]
+napi-build-ohos = "1.2"

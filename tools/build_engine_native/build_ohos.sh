@@ -74,6 +74,17 @@ EOF
 
 write_cargo_config
 
+# 宿主 crate 随本仓库一起维护（engine/vectorcraft-ohos），编译前铺进上游源码树。
+# 上游没有这个目录 —— 它是本项目新写的，所以必须从这里同步过去，改代码也改这边。
+HOST="$(cd "$(dirname "$0")/../.." && pwd)/engine/vectorcraft-ohos"
+if [[ -d "$HOST" ]]; then
+  echo "==> 铺设宿主 crate → $SRC/apps/vectorcraft-ohos"
+  mkdir -p "$SRC/apps/vectorcraft-ohos"
+  cp -R "$HOST/." "$SRC/apps/vectorcraft-ohos/"
+else
+  echo "警告：找不到 $HOST，将沿用源码树里现有的 apps/vectorcraft-ohos" >&2
+fi
+
 if ! rustup target list --installed | grep -qx "$TARGET"; then
   echo "==> 安装 Rust 目标 $TARGET"
   rustup target add "$TARGET"
