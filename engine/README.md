@@ -37,3 +37,25 @@ bash <本仓库>/tools/build_engine_native/build_ohos.sh /d/vc-build/vc016/vecto
 - **`target/` 是编译缓存，删了不影响源码**。删掉后重新编译是全量，约 1–2 小时
   （依赖已缓存在 `~/.cargo/registry`，不用重新下载）。
 - 改完引擎代码记得把 `engine/vectorcraft-ohos/` 的改动提交，`apps/` 下那份是编译时的临时副本。
+
+## engine-zh.patch 里到底是什么（0.16.0 基准，4 个文件）
+
+| 文件 | 改了什么 |
+|---|---|
+| `crates/ui-egui/src/theme.rs` | 挂内嵌 CJK 子集；**并在其后追加 `/system/fonts/HarmonyOS_Sans_SC.ttf`** —— egui 不会自己去系统目录找字，只挂子集的话画布上输入生僻字会空白 |
+| `crates/text/src/fontdb.rs` | 导出路径（SVG/PNG）同样兜底到系统字库 |
+| `crates/ui-egui/src/chrome.rs` | 品牌名 / 去掉站外社区外链 |
+| `crates/ui-egui/src/canvas.rs` | 画布侧的小改动 |
+
+补丁是「上游 0.16.0 → 本工程」的完整差值，**用 `git apply --check` 验证过**。
+如果哪次改了源码树里的上游文件却没同步补丁，从零重建就会丢改动；发现补丁打不上时，
+按下方办法重新生成（比对基准可以直接用解压出来的干净源码）：
+
+```bash
+# 干净源码 vs 当前源码树，只取上游文件（apps/vectorcraft-ohos 由脚本投放，Cargo.lock 由 cargo 重生成）
+diff -rq --exclude=target --exclude=vectorcraft-ohos --exclude=.cargo \
+     --exclude='NotoSansSC-Subset.ttf' <干净源码> <当前源码树>
+```
+
+**`Cargo.lock` 不在补丁里**：宿主 crate 一铺进 `apps/`，cargo 就会把 `napi` 依赖写进 lock；
+它在离线缓存齐备时能自动重算，不需要跟着补丁走。

@@ -440,6 +440,20 @@ struct Index {
     this.imeValue = value;
   }
 
+  /** 把焦点交给隐藏输入框（拿到焦点系统才弹软键盘）。节点刚建好要等一帧才可聚焦，故带延迟。 */
+  private focusIme(delay: number): void {
+    setTimeout(() => {
+      if (!this.imeActive) {
+        return;
+      }
+      try {
+        this.getUIContext().getFocusController().requestFocus('vc_ime');
+      } catch (e) {
+        console.error('[VectorCraft] IME 焦点失败: ' + JSON.stringify(e));
+      }
+    }, delay);
+  }
+
   /** 引擎需要文字输入时才把焦点给隐藏输入框，否则系统会莫名弹输入法。 */
   private syncImeFocus(): void {
     let wants: boolean = false;
@@ -458,13 +472,9 @@ struct Index {
     }
     try {
       if (wants) {
-        setTimeout(() => {
-          try {
-            this.getUIContext().getFocusController().requestFocus('vc_ime');
-          } catch (e) {
-            console.error('[VectorCraft] IME 焦点失败: ' + JSON.stringify(e));
-          }
-        }, 50);
+        // 主路径 50ms、兜底 240ms：个别机型首帧还没完成布局，一次请求会被丢掉
+        this.focusIme(50);
+        this.focusIme(240);
       } else {
         this.getUIContext().getFocusController().requestFocus('vc_root');
       }
@@ -796,6 +806,9 @@ struct Index {
           .backgroundColor(Color.Transparent)
           .caretColor(Color.Transparent)
           .enablePreviewText(false)
+          .onAppear(() => {
+            this.focusIme(0);
+          })
           .onChange((value: string) => {
             this.onImeChange(value);
           })
@@ -908,7 +921,7 @@ struct Index {
             this.sidebarExpanded = !this.sidebarExpanded;
           })
         if (this.sidebarExpanded) {
-          Text('v2.0.0 · 引擎 0.16.0')
+          Text('v2.0.1 · 引擎 0.16.0')
             .fontSize(10)
             .fontColor($r('app.color.text_secondary'))
             .margin({ left: 16, top: 4, bottom: 12 })
@@ -1278,7 +1291,7 @@ struct Index {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
           .margin({ top: 14 })
-        Text('v2.0.0 · VectorCraft 0.16.0 引擎')
+        Text('v2.0.1 · VectorCraft 0.16.0 引擎')
           .fontSize(12)
           .fontColor($r('app.color.text_secondary'))
           .margin({ top: 4 })

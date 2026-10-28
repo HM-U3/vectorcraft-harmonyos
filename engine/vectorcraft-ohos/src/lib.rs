@@ -510,7 +510,11 @@ fn run(surface_id: u64, mut width: u32, mut height: u32, mut dpi: f32, rx: Recei
             app.ui(ui);
         });
 
-        *WANTS_TEXT.lock().unwrap() = ctx.egui_wants_keyboard_input();
+        // 两类文字输入都要唤起系统输入法：
+        // 1. egui 自己的输入控件（各种对话框里的单行/多行框）—— egui 有控件焦点即成立；
+        // 2. 文字工具在画布上的就地输入 —— 那是引擎自己的插入符，egui 没有任何控件持有焦点，
+        //    只看 `egui_wants_keyboard_input()` 会永远拿到 false（这正是「呼不出虚拟键盘」的原因）。
+        *WANTS_TEXT.lock().unwrap() = ctx.egui_wants_keyboard_input() || app.session.tool_wants_text();
 
         let jobs = ctx.tessellate(output.shapes, output.pixels_per_point);
 
