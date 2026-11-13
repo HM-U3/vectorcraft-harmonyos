@@ -1,143 +1,69 @@
-diff --git a/crates/text/src/fontdb.rs b/crates/text/src/fontdb.rs
-index 3d97083..8a8f5d0 100644
---- a/crates/text/src/fontdb.rs
-+++ b/crates/text/src/fontdb.rs
-@@ -32,6 +32,8 @@ static BUNDLED: &[&[u8]] = &[
-     include_bytes!("../../../assets/fonts/Inter-Medium.ttf"),
-     include_bytes!("../../../assets/fonts/Inter-SemiBold.ttf"),
-     include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf"),
-+    // HarmonyOS 中文化：Noto Sans SC 子集，文档中文文本的回退字形
-+    include_bytes!("../../../assets/fonts/NotoSansSC-Subset.ttf"),
- ];
- /// Without `bundled-fonts` a database starts with none: the embedder adds its fonts
- /// ([`FontDb::add_font`]); until then text has no glyphs.
-@@ -1725,7 +1727,7 @@ impl FontDb {
-                 }
+diff --git a/crates/text/src/fontdb/dirs.rs b/crates/text/src/fontdb/dirs.rs
+index 0ff448e..20eb324 100644
+--- a/crates/text/src/fontdb/dirs.rs
++++ b/crates/text/src/fontdb/dirs.rs
+@@ -129,7 +129,11 @@ pub fn system_font_dirs() -> Vec<PathBuf> {
+         return dirs;
+     }
+     let home = std::env::var_os("HOME").map(PathBuf::from);
+-    if cfg!(target_os = "macos") {
++    // HarmonyOS 移植：系统字库都在 /system/fonts，没有 fontconfig，也没有 /usr/share/fonts。
++    // 不加这支会落到下面的 Linux 分支，等于找不到任何已装字体（界面里的中文只能显示豆腐块）。
++    if cfg!(target_env = "ohos") {
++        dirs.push("/system/fonts".into());
++    } else if cfg!(target_os = "macos") {
+         dirs.extend(["/System/Library/Fonts", "/Library/Fonts", "/Network/Library/Fonts"].map(Into::into));
+         if let Some(h) = &home {
+             dirs.push(h.join("Library/Fonts"));
+diff --git a/crates/ui-egui/src/canvas/home.rs b/crates/ui-egui/src/canvas/home.rs
+index cd2ac9c..16f3a77 100644
+--- a/crates/ui-egui/src/canvas/home.rs
++++ b/crates/ui-egui/src/canvas/home.rs
+@@ -27,7 +27,8 @@ fn home_content(app: &mut VectorcraftApp, ui: &mut Ui) {
+     let t = Tokens::get(ui.ctx());
+     // The welcome and the New / Open buttons sit centred, as PhotoCraft's Home screen does (#4684).
+     ui.vertical_centered(|ui| {
+-        ui.label(egui::RichText::new(tl!("Welcome to VectorCraft")).font(theme::semibold(26.0)).color(t.text));
++        // HarmonyOS 移植：首屏直接呈现客户端品牌，避免「应用名 = 矢量工坊、首页却是别人的名字」。
++        ui.label(egui::RichText::new("矢量工坊").font(theme::semibold(26.0)).color(t.text));
+         ui.add_space(4.0);
+         ui.label(egui::RichText::new(tl!("Vector illustration — fast, open, scriptable.")).size(14.0).color(t.text_dim));
+         ui.add_space(22.0);
+@@ -60,12 +61,6 @@ fn home_content(app: &mut VectorcraftApp, ui: &mut Ui) {
              }
          }
--        Self {
-+        let db = Self {
-             faces: RwLock::new(faces),
-             outlines: Mutex::new(HashMap::new()),
-             images: Mutex::new(GlyphCache::default()),
-@@ -1747,7 +1749,22 @@ impl FontDb {
-             #[cfg(not(target_arch = "wasm32"))]
-             stamp: Mutex::new(None),
-             instances: Mutex::new(Instances::default()),
-+        };
-+        // HarmonyOS：把系统里的中文全字库也挂进来，文字工具里输入的任意汉字才有字形。
-+        // 内嵌的 NotoSansSC 只是界面词条用的子集（约 1700 个汉字），写文档不够用。
-+        #[cfg(target_env = "ohos")]
-+        {
-+            for path in [
-+                "/system/fonts/HarmonyOS_Sans_SC.ttf",
-+                "/system/fonts/NotoSansCJK-Regular.ttc",
-+                "/system/fonts/NotoSansSC-Regular.otf",
-+            ] {
-+                if let Ok(bytes) = std::fs::read(path) {
-+                    db.add_font(bytes);
-+                }
-+            }
-         }
-+        db
-     }
- 
-     /// Enable or disable the lazy system-font fallback for characters the loaded fonts lack
-diff --git a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
-index e29b61c..9263779 100644
---- a/crates/ui-egui/src/canvas.rs
-+++ b/crates/ui-egui/src/canvas.rs
-@@ -3117,10 +3117,11 @@ fn home(app: &mut VectorcraftApp, ui: &mut Ui, rect: egui::Rect) {
      });
- }
- 
--/// The Home screen's column: welcome, New / Open, Recent Files, presets and community links.
-+/// The Home screen's column: welcome, New / Open, Recent Files and presets.
- fn home_content(app: &mut VectorcraftApp, ui: &mut Ui) {
-     let t = Tokens::get(ui.ctx());
--    ui.label(egui::RichText::new(tl!("Welcome to VectorCraft")).font(theme::semibold(26.0)).color(t.text));
-+    // HarmonyOS 版：首屏直接呈现客户端品牌，避免「应用名 = 矢量工坊、首页却是别人的名字」。
-+    ui.label(egui::RichText::new("矢量工坊").font(theme::semibold(26.0)).color(t.text));
-     ui.add_space(4.0);
-     ui.label(egui::RichText::new(tl!("Vector illustration — fast, open, scriptable.")).size(14.0).color(t.text_dim));
-     ui.add_space(22.0);
-@@ -3149,9 +3150,8 @@ fn home_content(app: &mut VectorcraftApp, ui: &mut Ui) {
-         }
-     });
-     ui.add_space(28.0);
--    ui.label(egui::RichText::new(tl!("Community")).font(theme::semibold(14.0)).color(t.text));
--    ui.add_space(10.0);
--    crate::community::links(app, ui);
-+    // 鸿蒙版移除「社区」区块：Discord 在境内不可访问（审核会判无效功能），
-+    // 网站 / 应用页 / GitHub 三个外链也属站外导流，统一由原生「关于本应用」页承载。
+-    ui.add_space(28.0);
+-    ui.vertical_centered(|ui| {
+-        ui.label(egui::RichText::new(tl!("Community")).font(theme::semibold(14.0)).color(t.text));
+-        ui.add_space(10.0);
+-        crate::community::links_centered(app, ui);
+-    });
  }
  
  /// The Home screen's Recent Files (#663): the first of File › Open Recent Files, each its name and
 diff --git a/crates/ui-egui/src/chrome.rs b/crates/ui-egui/src/chrome.rs
-index 2a18533..bb43ff8 100644
+index 1765c58..b2e6d3e 100644
 --- a/crates/ui-egui/src/chrome.rs
 +++ b/crates/ui-egui/src/chrome.rs
-@@ -40,7 +40,9 @@ pub fn app_bar(app: &mut VectorcraftApp, ui: &mut Ui) {
+@@ -59,7 +59,9 @@ pub fn app_bar(app: &mut VectorcraftApp, ui: &mut Ui) {
          }
          ui.horizontal_centered(|ui| {
              // With the system title bar the OS draws its own icon: no in-app brand mark.
 -            if !system {
-+            // HarmonyOS 移植：Web / 原生鸿蒙构建同样不画。18 pt 的图标孤悬在最左、与「文件/编辑/…」
-+            // 同一行，看着像按钮却点不动；品牌由原生外壳（侧栏展开态）呈现。
-+            if !system && !cfg!(any(target_arch = "wasm32", target_env = "ohos")) {
++            // HarmonyOS 移植：原生外壳也不画 —— 18 pt 图标孤悬在最左、与「文件/编辑/…」同一行，
++            // 看着像按钮却点不动，品牌由 ArkTS 侧栏呈现。
++            if !system && !cfg!(target_env = "ohos") {
                  let (r, _) = ui.allocate_exact_size(vec2(MARK, MARK), Sense::hover());
                  crate::brand::paint_mark(ui, r);
                  ui.add_space(6.0);
-@@ -69,7 +71,8 @@ pub fn app_bar(app: &mut VectorcraftApp, ui: &mut Ui) {
+@@ -97,7 +99,8 @@ pub fn app_bar(app: &mut VectorcraftApp, ui: &mut Ui) {
              let icon = 28.0;
-             let search = room >= 64.0 + 8.0 + gap + icon;
+             let search = switcher && room >= 64.0 + 8.0 + gap + icon;
              let ws_w = ws_w.min(room - 8.0 - gap - if search { icon } else { 0.0 }).max(64.0);
 -            let discord = search && room >= ws_w + 8.0 + gap + icon + 10.0 + gap + crate::community::discord_width(ui, false);
-+            // 鸿蒙版不显示 Discord 入口：境内无法访问，且属站外社群导流。
++            // 鸿蒙版不显示 Discord 入口：境内无法访问（审核会判无效功能），且属站外社群导流。
 +            let discord = false;
              let mut rui = ui.new_child(egui::UiBuilder::new().max_rect(right).layout(egui::Layout::right_to_left(egui::Align::Center)));
              let ui = &mut rui;
              // Workspace switcher: shows the current workspace, opens Window → Workspace.
-diff --git a/crates/ui-egui/src/theme.rs b/crates/ui-egui/src/theme.rs
-index bff6ff8..ce66ad1 100644
---- a/crates/ui-egui/src/theme.rs
-+++ b/crates/ui-egui/src/theme.rs
-@@ -517,6 +517,38 @@ pub fn install_fonts(ctx: &egui::Context) {
-     fonts.families.insert(FontFamily::Name(FONT_UI.into()), family(ui, &fallback));
-     fonts.families.insert(FontFamily::Name(FONT_MONO.into()), family(mono, &mono_fallback));
-     add_craft_fonts(&mut fonts);
-+    // HarmonyOS 中文化：内嵌 Noto Sans SC 子集（CJK 字形），追加到所有字族末尾。
-+    // 原生构建读不到系统 CJK 字体时（宿主另会再挂系统字体链），界面中文靠它兜底。
-+    fonts.font_data.insert("NotoSansSC".to_owned(), Arc::new(FontData::from_static(include_bytes!("../../../assets/fonts/NotoSansSC-Subset.ttf"))));
-+    for (_family, stack) in fonts.families.iter_mut() {
-+        if !stack.iter().any(|f| f == "NotoSansSC") {
-+            stack.push("NotoSansSC".to_string());
-+        }
-+    }
-+    // HarmonyOS：系统自带的 HarmonyOS Sans SC（约 20 MB，覆盖 GB18030）接在子集**之后**作兜底。
-+    // 内嵌子集只覆盖界面词条与源码字面量（约四千多字），用户在文字图层里输入生僻字
-+    // （「龘」「犇」「𠮷」这类）时子集会缺字形、画布上直接空白 —— 画布上的文字正是用
-+    // egui 的 galley 绘制的，所以必须把全字库挂到同一个字体栈里，光在 text crate 的
-+    // fontdb 里兜底只够导出，不够屏幕预览。
-+    // 子集有字时仍走子集（字形风格统一、包体小），只有缺字才落到系统字库。
-+    #[cfg(target_env = "ohos")]
-+    {
-+        for path in ["/system/fonts/HarmonyOS_Sans_SC.ttf", "/system/fonts/HarmonyOS_Sans_TC.ttf"] {
-+            let Ok(bytes) = std::fs::read(path) else { continue };
-+            let Some(stem) = std::path::Path::new(path).file_stem().map(|s| s.to_string_lossy().into_owned()) else {
-+                continue;
-+            };
-+            if fonts.font_data.contains_key(&stem) {
-+                continue;
-+            }
-+            fonts.font_data.insert(stem.clone(), Arc::new(FontData::from_owned(bytes)));
-+            for (_family, stack) in fonts.families.iter_mut() {
-+                if !stack.iter().any(|f| f == &stem) {
-+                    stack.push(stem.clone());
-+                }
-+            }
-+        }
-+    }
-     ctx.set_fonts(fonts);
- }
- 

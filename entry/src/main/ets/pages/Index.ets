@@ -5,7 +5,6 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { i18n } from '@kit.LocalizationKit';
 import display from '@ohos.display';
 import native from 'libvectorcraft_native.so';
-import { RecentStore, RecentEntry } from '../common/RecentStore';
 import { AppConstants, SurfaceMetrics } from '../common/Constants';
 
 /**
@@ -23,7 +22,6 @@ import { AppConstants, SurfaceMetrics } from '../common/Constants';
 struct Index {
   private xController: XComponentController = new XComponentController();
   private mainWindow: window.Window | undefined = undefined;
-  private recent: RecentStore | undefined = undefined;
   private dataDir: string = '';
   private started: boolean = false;
   private pollTimer: number = -1;
@@ -40,10 +38,7 @@ struct Index {
 
   @State pageLoaded: boolean = false;
   @State fatalError: string = '';
-  @State sidebarExpanded: boolean = false;
   @State showAbout: boolean = false;
-  @State showRecent: boolean = false;
-  @State recentList: RecentEntry[] = [];
   @State fullScreen: boolean = false;
   @State statusText: string = '正在准备…';
   // 手动维护的按压态：某些场景（点击后立即弹出覆盖层）拿不到 touch Up，
@@ -67,13 +62,6 @@ struct Index {
     this.mainWindow = AppStorage.get<window.Window>('mainWindow');
     this.dataDir = ctx.filesDir;
     native.setDataDir(this.dataDir);
-
-    // 最近文件：原生侧自带一份沙箱副本（引擎自带的「最近」基于文件路径，原生端同样无处可存）
-    const store = new RecentStore(ctx);
-    this.recent = store;
-    this.recentList = store.list();
-
-    console.info('[VectorCraft] Index aboutToAppear, 最近文件=' + this.recentList.length);
   }
 
   /** 页面显示后把焦点交给渲染区，否则键盘事件收不到。 */
@@ -117,11 +105,9 @@ struct Index {
     return this.effectiveWidth() >= AppConstants.BREAKPOINT_MEDIUM && !this.isWide();
   }
 
+  /** 宽屏不再有左侧栏：画布直接铺满窗口。 */
   private sidebarWidth(): number {
-    if (!this.isWide()) {
-      return 0;
-    }
-    return this.sidebarExpanded ? 216 : 64;
+    return 0;
   }
 
   private topBarHeight(): number {
@@ -346,10 +332,6 @@ struct Index {
       fs.writeSync(out.fd, buffer);
       fs.closeSync(out);
 
-      // 登记「最近文件」：原生侧留一份沙箱副本，杀进程后仍可重新打开
-      if (this.recent) {
-        this.recentList = this.recent.add(name, uri, bytes);
-      }
       AppStorage.setOrCreate(AppConstants.KEY_SAVE_STATUS, '已保存 ' + name);
       console.info('[VectorCraft] saved ' + name + ' -> ' + uri + ' (' + buffer.byteLength + 'B)');
     } catch (err) {
@@ -555,57 +537,6 @@ struct Index {
   // 最近文件
   // ------------------------------------------------------------------
 
-  /**
-   * 打开一条最近文件。
-   *
-   * 原生引擎收文件的通道只有一条：把字节交给 Rust，它在下一帧当作「打开」处理。
-   * 保存时原生侧已经留了一份沙箱副本，这里直接读出字节还原成 ArrayBuffer 交过去。
-   */
-  private openRecent(entry: RecentEntry): void {
-    if (!this.started || this.engineState !== AppConstants.STATE_READY) {
-      this.toast('引擎尚未就绪，请稍候再试');
-      return;
-    }
-    const store = this.recent;
-    if (!store) {
-      this.toast('最近文件不可用');
-      return;
-    }
-    const data = store.read(entry.id);
-    if (!data || data.length === 0) {
-      this.toast('文件副本已丢失，请重新保存一次');
-      this.recentList = store.remove(entry.id);
-      return;
-    }
-    this.showRecent = false;
-    try {
-      const buffer: ArrayBuffer = new ArrayBuffer(data.length);
-      new Uint8Array(buffer).set(data);
-      const ok: boolean = native.openFile(entry.name, buffer);
-      console.info('[VectorCraft] 打开最近文件 ' + entry.name + ' ' + data.length + 'B -> ' + ok);
-      this.toast(ok ? '正在打开 ' + entry.name : '打开失败，请重试');
-    } catch (err) {
-      console.error('[VectorCraft] 打开最近文件失败: ' + JSON.stringify(err));
-      this.toast('打开失败，请重试');
-    }
-  }
-
-  private removeRecent(entry: RecentEntry): void {
-    if (!this.recent) {
-      return;
-    }
-    this.recentList = this.recent.remove(entry.id);
-    this.toast('已移除 ' + entry.name);
-  }
-
-  private clearRecent(): void {
-    if (!this.recent) {
-      return;
-    }
-    this.recentList = this.recent.clear();
-    this.toast('已清空最近文件');
-  }
-
   private toggleFullScreen(): void {
     const win = this.mainWindow;
     if (!win) {
@@ -678,12 +609,10 @@ struct Index {
       })
       .backgroundColor($r('app.color.shell_bg'))
 
-      // 2. 自适应原生外壳
-      if (this.isWide()) {
-        this.SideBar()
-      } else if (this.isMedium()) {
+      // 2. 自适应原生外壳（宽屏不加任何侧栏，画布用满窗口）
+      if (this.isMedium()) {
         this.TopBar()
-      } else {
+      } else if (!this.isWide()) {
         this.BottomBar()
       }
 
@@ -697,12 +626,7 @@ struct Index {
         this.AboutOverlay()
       }
 
-      // 5. 最近文件面板
-      if (this.showRecent) {
-        this.RecentOverlay()
-      }
-
-      // 6. 致命错误面板
+      // 5. 致命错误面板
       if (this.fatalError.length > 0 || this.engineState === AppConstants.STATE_ERROR) {
         this.ErrorOverlay()
       }
@@ -820,124 +744,6 @@ struct Index {
 
   // ---------------- 宽屏：左侧栏 ----------------
 
-  @Builder
-  SideBar() {
-    Column() {
-      // 品牌区：只在展开态显示。收起态下孤零零一个图标既无信息量又容易被误认，
-      // 干脆整块不渲染，把空间留给下面的状态灯
-      if (this.sidebarExpanded) {
-        Row() {
-          Image($r('app.media.app_icon'))
-            .width(38)
-            .height(38)
-            .borderRadius(10)
-          Column() {
-            Text('矢量工坊')
-              .fontSize(15)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-            Text('VectorCraft 引擎 · 鸿蒙版')
-              .fontSize(10)
-              .fontColor($r('app.color.text_secondary'))
-              .margin({ top: 2 })
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-          .margin({ left: 10 })
-        }
-        .width('100%')
-        .padding({ left: 13, right: 13, top: 16, bottom: 16 })
-
-        Divider().color($r('app.color.divider')).strokeWidth(1)
-      } else {
-        Blank().height(10)
-      }
-
-      // 引擎状态灯 + 状态文字（收起态不显示：一个孤立的圆点没有含义，看着像多余的控件）
-      Column() {
-        Row() {
-          if (this.sidebarExpanded) {
-            Circle()
-              .width(7)
-              .height(7)
-              .fill(this.stateColor())
-            Text(this.engineStateLabel())
-              .fontSize(11)
-              .fontColor($r('app.color.text_secondary'))
-              .margin({ left: 8 })
-              .layoutWeight(1)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
-        }
-        .width('100%')
-        .height('100%')
-        .justifyContent(this.sidebarExpanded ? FlexAlign.Start : FlexAlign.Center)
-        // 展开态留左边距与文字对齐；收起态左右都留 0，居中才是真的居中
-        .padding({ left: this.sidebarExpanded ? 16 : 0, right: this.sidebarExpanded ? 8 : 0 })
-        .onClick(() => {
-          if (!this.sidebarExpanded) {
-            this.toast(this.engineStateLabel());
-          }
-        })
-      }
-      .width('100%')
-      .height(34)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(this.sidebarExpanded ? HorizontalAlign.Start : HorizontalAlign.Center)
-
-      // 功能列表
-      Column() {
-        this.NavItem($r('app.media.ic_home'), '返回首页', '重启引擎回到首页', false, 'nav-home', () => {
-          this.backToEditor();
-        })
-        this.NavItem($r('app.media.ic_recent'), '最近文件',
-          this.recentList.length > 0 ? this.recentList.length + ' 个' : '暂无', false, 'nav-recent', () => {
-            this.showRecent = true;
-          })
-        this.NavItem($r('app.media.ic_reload'), '重新加载引擎', '', false, 'nav-reload', () => {
-          this.reloadEngine();
-        })
-        this.NavItem($r('app.media.ic_fullscreen'), this.fullScreen ? '退出全屏' : '全屏显示', '', false, 'nav-fullscreen',
-          () => {
-            this.toggleFullScreen();
-          })
-      }
-      .width('100%')
-      .margin({ top: 6 })
-
-      Blank()
-
-      // 底部
-      Column() {
-        this.NavItem($r('app.media.ic_help'), '使用说明', '', false, 'nav-help', () => {
-          this.openHelp();
-        })
-        this.NavItem($r('app.media.ic_info'), '关于本应用', '', false, 'nav-about', () => {
-          this.showAbout = true;
-        })
-        this.NavItem(this.sidebarExpanded ? $r('app.media.ic_collapse') : $r('app.media.ic_expand'),
-          this.sidebarExpanded ? '收起侧边栏' : '展开', '', false, 'nav-collapse', () => {
-            this.sidebarExpanded = !this.sidebarExpanded;
-          })
-        if (this.sidebarExpanded) {
-          Text('v2.0.1 · 引擎 0.16.0')
-            .fontSize(10)
-            .fontColor($r('app.color.text_secondary'))
-            .margin({ left: 16, top: 4, bottom: 12 })
-        } else {
-          Blank().height(12)
-        }
-      }
-      .width('100%')
-    }
-    .width(this.sidebarWidth())
-    .height('100%')
-    .backgroundColor($r('app.color.panel_bg'))
-    .border({ width: { right: 1 }, color: $r('app.color.divider') })
-    .alignItems(HorizontalAlign.Start)
-  }
-
   // ---------------- 中屏：顶部栏 ----------------
 
   @Builder
@@ -962,9 +768,6 @@ struct Index {
 
       this.IconButton($r('app.media.ic_home'), 'tb-home', () => {
         this.backToEditor();
-      })
-      this.IconButton($r('app.media.ic_recent'), 'tb-recent', () => {
-        this.showRecent = true;
       })
       this.IconButton($r('app.media.ic_reload'), 'tb-reload', () => {
         this.reloadEngine();
@@ -992,9 +795,6 @@ struct Index {
         this.PillButton($r('app.media.ic_home'), '首页', () => {
           this.backToEditor();
         })
-        this.PillButton($r('app.media.ic_recent'), '最近', () => {
-          this.showRecent = true;
-        })
         this.PillButton($r('app.media.ic_help'), '说明', () => {
           this.openHelp();
         })
@@ -1016,58 +816,6 @@ struct Index {
   }
 
   // ---------------- 复用小部件 ----------------
-
-  @Builder
-  NavItem(icon: Resource, label: string, value: string, highlight: boolean, key: string, action: () => void) {
-    Row() {
-      Image(icon)
-        .width(20)
-        .height(20)
-        .draggable(false)
-      if (this.sidebarExpanded) {
-        Column() {
-          Text(label)
-            .fontSize(13)
-            .fontColor(highlight ? $r('app.color.text_primary') : $r('app.color.text_secondary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          if (value.length > 0) {
-            Text(value)
-              .fontSize(10)
-              .fontColor($r('app.color.text_secondary'))
-              .margin({ top: 1 })
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
-        }
-        .alignItems(HorizontalAlign.Start)
-        .margin({ left: 12 })
-        .layoutWeight(1)
-      }
-    }
-    .width('100%')
-    .height(44)
-    .padding({ left: this.sidebarExpanded ? 16 : 14, right: 10 })
-    .justifyContent(this.sidebarExpanded ? FlexAlign.Start : FlexAlign.Center)
-    .borderRadius(10)
-    .backgroundColor(this.pressedKey === key ? $r('app.color.panel_bg_hover') : Color.Transparent)
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.pressedKey = key;
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        if (this.pressedKey === key) {
-          this.pressedKey = '';
-        }
-      }
-    })
-    .onClick(() => {
-      // 弹层可能吃掉 Up 事件，这里兜底复位，避免按钮停在深灰背景上
-      if (this.pressedKey === key) {
-        this.pressedKey = '';
-      }
-      action();
-    })
-  }
 
   @Builder
   IconButton(icon: Resource, key: string, action: () => void) {
@@ -1150,135 +898,6 @@ struct Index {
   }
 
   @Builder
-  RecentOverlay() {
-    Column() {
-      Column() {
-        Row() {
-          Text('最近文件')
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_primary'))
-            .layoutWeight(1)
-          if (this.recentList.length > 0) {
-            Text('清空')
-              .fontSize(12)
-              .fontColor($r('app.color.danger'))
-              .padding({ left: 10, right: 4, top: 4, bottom: 4 })
-              .onClick(() => {
-                this.clearRecent();
-              })
-          }
-        }
-        .width('100%')
-
-        Text('保存过的文件会在应用内留一份副本，点一下即可重新打开；杀进程或重启后依然在。')
-          .fontSize(12)
-          .fontColor($r('app.color.text_secondary'))
-          .margin({ top: 8 })
-          .width('100%')
-          .textAlign(TextAlign.Start)
-
-        if (this.recentList.length === 0) {
-          Column() {
-            Text('还没有保存过文件')
-              .fontSize(13)
-              .fontColor($r('app.color.text_secondary'))
-            Text('在编辑器里保存后，这里就会出现')
-              .fontSize(11)
-              .fontColor($r('app.color.text_secondary'))
-              .margin({ top: 4 })
-          }
-          .width('100%')
-          .height(120)
-          .justifyContent(FlexAlign.Center)
-        } else {
-          List({ space: 6 }) {
-            ForEach(this.recentList, (item: RecentEntry) => {
-              ListItem() {
-                this.RecentRow(item)
-              }
-            }, (item: RecentEntry) => item.id)
-          }
-          .width('100%')
-          .height(306)
-          .margin({ top: 12 })
-          .scrollBar(BarState.Auto)
-        }
-
-        Button('关闭')
-          .fontSize(14)
-          .fontColor($r('app.color.text_primary'))
-          .backgroundColor($r('app.color.panel_bg_hover'))
-          .width('100%')
-          .height(40)
-          .borderRadius(20)
-          .margin({ top: 12 })
-          .onClick(() => {
-            this.showRecent = false;
-          })
-      }
-      .width(this.isWide() ? 460 : '90%')
-      .padding(22)
-      .backgroundColor($r('app.color.panel_bg'))
-      .borderRadius(18)
-      .alignItems(HorizontalAlign.Start)
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor('rgba(0,0,0,0.55)')
-    .onClick(() => {
-      this.showRecent = false;
-    })
-  }
-
-  @Builder
-  RecentRow(item: RecentEntry) {
-    Row() {
-      Image($r('app.media.ic_save'))
-        .width(20)
-        .height(20)
-        .draggable(false)
-      Column() {
-        Text(item.name)
-          .fontSize(14)
-          .fontColor($r('app.color.text_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(RecentStore.formatTime(item.savedAt) + ' · ' + RecentStore.formatSize(item.size))
-          .fontSize(11)
-          .fontColor($r('app.color.text_secondary'))
-          .margin({ top: 2 })
-          .maxLines(1)
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-      .margin({ left: 10 })
-
-      Text('打开')
-        .fontSize(12)
-        .fontColor($r('app.color.accent'))
-        .padding({ left: 8, right: 8, top: 6, bottom: 6 })
-      Text('✕')
-        .fontSize(13)
-        .fontColor($r('app.color.text_secondary'))
-        .padding({ left: 6, right: 6, top: 6, bottom: 6 })
-        .onClick(() => {
-          this.removeRecent(item);
-        })
-    }
-    .width('100%')
-    .height(54)
-    .padding({ left: 12, right: 6 })
-    .borderRadius(10)
-    .backgroundColor($r('app.color.panel_bg_hover'))
-    .onClick(() => {
-      this.openRecent(item);
-    })
-  }
-
-  @Builder
   AboutOverlay() {
     Column() {
       Column() {
@@ -1291,14 +910,14 @@ struct Index {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_primary'))
           .margin({ top: 14 })
-        Text('v2.0.1 · VectorCraft 0.16.0 引擎')
+        Text('v2.1.0 · VectorCraft 0.24.1 引擎')
           .fontSize(12)
           .fontColor($r('app.color.text_secondary'))
           .margin({ top: 4 })
 
         Divider().color($r('app.color.divider')).strokeWidth(1).margin({ top: 16, bottom: 16 })
 
-        this.AboutLine('编辑引擎', 'VectorCraft 0.16.0（原生）')
+        this.AboutLine('编辑引擎', 'VectorCraft 0.24.1（原生）')
         this.AboutLine('上游项目', 'storytold/vectorcraft')
         this.AboutLine('界面语言', '简体中文（可在引擎内切换）')
         this.AboutLine('许可协议', 'MIT / Apache-2.0')

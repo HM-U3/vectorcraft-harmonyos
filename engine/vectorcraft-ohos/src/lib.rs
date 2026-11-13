@@ -484,6 +484,9 @@ fn run(surface_id: u64, mut width: u32, mut height: u32, mut dpi: f32, rx: Recei
                     delta,
                     phase: egui::TouchPhase::Move,
                     modifiers,
+                    // egui 0.37 起滚轮事件要标明来源。我们是从 ArkTS 的双指手势合成出来的，
+                    // 既不是物理滚轮也不是触控板，按「平台未说明」上报，保持旧行为。
+                    source: egui::MouseWheelSource::Unknown,
                 }),
                 InputEvent::Key { key, pressed, modifiers } => {
                     events.push(egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers })
@@ -502,7 +505,8 @@ fn run(surface_id: u64, mut width: u32, mut height: u32, mut dpi: f32, rx: Recei
         raw_input
             .viewports
             .insert(egui::ViewportId::ROOT, egui::ViewportInfo { native_pixels_per_point: Some(dpi), ..Default::default() });
-        app.raw_input_hook(&mut raw_input);
+        // egui 0.37 起这个钩子要先拿到 Context（它在里面读视口与像素密度）。
+        app.raw_input_hook(&ctx, &mut raw_input);
 
         let frame_ctx = ctx.clone();
         let output = ctx.run_ui(raw_input, |ui| {

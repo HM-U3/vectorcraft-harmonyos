@@ -19,7 +19,9 @@ vectorcraft-engine = { workspace = true }
 # The editor UI, unchanged: it takes no eframe dependency, the host drives logic/ui itself.
 vectorcraft-ui-egui = { workspace = true }
 egui = { workspace = true }
-egui-wgpu = { version = "0.36", default-features = false }
+# 0.24 起上游把 egui / egui-wgpu 换成 storytold 的 git fork（工作区 [patch.crates-io] 已重定向），
+# 版本号跟着上游走；wgpu 仍是 crates.io 的 30.x。
+egui-wgpu = { version = "0.37", default-features = false }
 wgpu = { version = "30", default-features = false, features = ["std", "gles", "wgsl"] }
 raw-window-handle = "0.6"
 pollster = "0.4"

@@ -13,3 +13,7 @@
 
 # 本机签名配置备份（tools/local-signing.py 生成，含证书路径与加密口令，切勿提交）
 /build-profile.local-signing.json5
+
+# 引擎原生库 107 MB，超过 GitHub 单文件 100 MB 限制 → 走 Release 附件分发
+# 构建前从 Releases 下载 libvectorcraft_native.so 放进 entry/libs/arm64-v8a/
+entry/libs/**/*.so
